@@ -1,0 +1,202 @@
+/* Estilos para a aplicação de arbitragem */
+
+:root {
+  --primary-color: #1e88e5;
+  --positive-color: #4caf50;
+  --negative-color: #f44336;
+  --background-color: #f5f7fa;
+  --card-background: #ffffff;
+  --border-color: #e0e0e0;
+  --text-primary: #333333;
+  --text-secondary: #757575;
+  --header-background: #ffffff;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-primary);
+}
+
+.app-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.app-header {
+  background-color: var(--header-background);
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.header-subtitle {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.last-updated {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.connection-status {
+  font-weight: bold;
+  margin-left: 8px;
+}
+
+.connection-status.connected {
+  color: var(--positive-color);
+}
+
+.connection-status.disconnected {
+  color: var(--negative-color);
+}
+
+.table-container {
+  background-color: var(--card-background);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.arbitrage-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.arbitrage-table th {
+  background-color: #f9f9f9;
+  padding: 12px 15px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.arbitrage-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 14px;
+}
+
+.arbitrage-table tr:last-child td {
+  border-bottom: none;
+}
+
+.arbitrage-table tr:hover {
+  background-color: #f5f5f5;
+}
+
+.pair-cell {
+  font-weight: 600;
+}
+
+.pair-name {
+  font-size: 14px;
+}
+
+.pair-direction {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.price-cell {
+  font-family: 'Courier New', monospace;
+}
+
+.price-value {
+  font-size: 13px;
+}
+
+.profit-cell {
+  font-weight: 600;
+  text-align: center;
+}
+
+.profit-positive {
+  color: var(--positive-color);
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.profit-negative {
+  color: var(--negative-color);
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+.volume-cell {
+  text-align: center;
+  background-color: rgba(255, 152, 0, 0.1);
+  color: #ff9800;
+  font-weight: 600;
+}
+
+.time-cell {
+  text-align: center;
+  background-color: rgba(30, 136, 229, 0.1);
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.no-data {
+  text-align: center;
+  padding: 30px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.app-footer {
+  text-align: center;
+  padding: 15px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  background-color: var(--card-background);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Responsividade */
+@media (max-width: 1200px) {
+  .arbitrage-table {
+    font-size: 13px;
+  }
+  
+  .arbitrage-table th,
+  .arbitrage-table td {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    padding: 10px;
+  }
+  
+  .table-container {
+    overflow-x: auto;
+  }
+  
+  .arbitrage-table {
+    min-width: 800px;
+  }
+}

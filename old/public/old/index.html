@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARBFLASH - Dashboard de Arbitragem</title>
+  <link rel="preconnect" href="https://www.mexc.com" crossorigin>
+  <link rel="dns-prefetch" href="https://www.mexc.com">
+  <link rel="preconnect" href="https://futures.mexc.com" crossorigin>
+  <link rel="dns-prefetch" href="https://futures.mexc.com">
+  <link rel="preconnect" href="https://www.gate.io" crossorigin>
+  <link rel="dns-prefetch" href="https://www.gate.io">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2 class="sidebar-title">Dashboard</h2>
+        <button class="sidebar-toggle" id="sidebar-toggle">
+          <svg class="icon" id="menu-icon" viewBox="0 0 24 24">
+            <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="icon" id="close-icon" viewBox="0 0 24 24" style="display: none;">
+            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" id="nav-arbitragens" data-view="arbitragens">
+          <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none">
+            <path d="M7 17l9.2-9.2M17 17V7H7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="nav-item-text">Arbitragens</span>
+        </button>
+
+        <button class="nav-item" id="nav-saida-op" data-view="saida-op">
+          <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none">
+            <path d="M17 7l-9.2 9.2M7 7v10h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="nav-item-text">Saída OP</span>
+        </button>
+
+        <button class="nav-item" id="nav-ambos-positivos" data-view="ambos-positivos">
+            <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="nav-item-text">Ambos Positivos</span>
+        </button>
+
+      </nav>
+
+      <div class="sidebar-controls">
+        <button class="control-button" id="toggle-sound-button">
+          <svg class="icon-small" id="sound-on-icon" viewBox="0 0 24 24" fill="none">
+            <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <svg class="icon-small" id="sound-off-icon" viewBox="0 0 24 24" style="display: none;" fill="none">
+            <path d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="control-button-text">Som OFF</span>
+        </button>
+
+        <button class="control-button" id="theme-toggle-button">
+          <svg class="icon-small" id="sun-icon" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          <svg class="icon-small" id="moon-icon" viewBox="0 0 24 24" style="display: none;" fill="none">
+            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          <span class="control-button-text">Claro</span>
+        </button>
+
+        <button class="control-button" id="toggle-pause-button">
+          <svg class="icon-small" id="pause-icon" viewBox="0 0 24 24" fill="none">
+            <rect x="6" y="4" width="4" height="16" stroke="currentColor" stroke-width="0" fill="currentColor"/>
+            <rect x="14" y="4" width="4" height="16" stroke="currentColor" stroke-width="0" fill="currentColor"/>
+          </svg>
+          <svg class="icon-small" id="play-icon" viewBox="0 0 24 24" style="display: none;" fill="none">
+            <polygon points="5,3 19,12 5,21" stroke="currentColor" stroke-width="0" fill="currentColor"/>
+          </svg>
+          <span class="control-button-text">Pausar</span>
+        </button>
+
+        </div>
+    </div>
+
+    <div class="main-content">
+      <header class="main-header">
+        <div class="header-content">
+          <div>
+            <h1 class="header-title-brand">ARBFLASH ⚡</h1>
+            <h2 class="header-title-dynamic" id="view-title">Arbitragens (0)</h2>
+            <p class="header-subtitle" id="view-subtitle">Oportunidades com Lucro de Entrada positivo</p>
+          </div>
+          <div class="header-status">
+            <span id="last-updated">Última atualização: --:--:--</span>
+            <div class="connection-status">
+              <div class="status-dot disconnected" id="connection-dot"></div>
+              <span id="connection-text">Desconectado</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="config-section">
+        <div class="config-container">
+          <div class="config-group">
+            <label for="default-capital-input">Capital Padrão (USD):</label>
+            <input type="number" id="default-capital-input" placeholder="Ex: 100" min="0">
+          </div>
+          <div class="config-group">
+            <label for="sound-profit-threshold-input">Lucro Som (%):</label>
+            <input type="number" id="sound-profit-threshold-input" value="0" min="0" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <div class="watch-section" id="watch-section">
+        <div class="section-header">
+          <h3>Pares em Vigilância (<span id="watched-pairs-count">0</span>)</h3>
+          <div class="watchlist-controls">
+            <input type="text" id="watch-pair-input" placeholder="Ex: BTC/USDT">
+            <button id="add-watch-pair-button">Vigiar Par</button>
+          </div>
+        </div>
+        <div id="watched-pairs-display-area"></div>
+      </div>
+
+      <div class="filters-section">
+        <div class="filters-container">
+          <span class="filters-label">Exibir OPs:</span>
+
+          <div class="filter-group">
+            <strong class="mexc-label">MEXC:</strong>
+            <div class="checkbox-stack">
+                <label><input type="checkbox" id="filter-mexc-spot" data-filterkey="mexcSpot" checked> Spot</label>
+                <label><input type="checkbox" id="filter-mexc-futures" data-filterkey="mexcFutures" checked> Futuros</label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <strong class="gateio-label">Gate.io:</strong>
+            <div class="checkbox-stack">
+                <label><input type="checkbox" id="filter-gateio-spot" data-filterkey="gateioSpot" checked> Spot</label>
+                <label><input type="checkbox" id="filter-gateio-futures" data-filterkey="gateioFutures" checked> Futuros</label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <div class="checkbox-stack">
+              <label for="filter-enable-fut-fut">
+                <input type="checkbox" id="filter-enable-fut-fut">
+                Futuros vs Futuros
+              </label>
+              <label for="filter-enable-spot-spot">
+                <input type="checkbox" id="filter-enable-spot-spot">
+                Spot vs Spot
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-min-volume">Vol. Mín (USD):</label>
+            <input type="number" id="filter-min-volume" value="0" min="0">
+          </div>
+
+          <div class="filter-group">
+            <label>Financ. (%):</label>
+            <input type="number" id="filter-funding-min" placeholder="Mín" step="0.001">
+            <span style="margin: 0 2px;">-</span>
+            <input type="number" id="filter-funding-max" placeholder="Máx" step="0.001">
+          </div>
+          
+          <div class="filter-group" id="filter-group-lucro-e">
+            <label for="filter-min-profit-e-display">Lucro E (%):</label>
+            <select id="filter-min-profit-e-display">
+              <option value="0">Todos > 0</option>
+              <option value="0.20">>= 0.20%</option>
+              <option value="0.50">>= 0.50%</option>
+              <option value="1.0">>= 1.0%</option>
+              <option value="1.5">>= 1.5%</option>
+              <option value="2.0">>= 2.0%</option>
+              <option value="3.0">>= 3.0%</option>
+              <option value="5.0">>= 5.0%</option>
+            </select>
+          </div>
+
+          <div class="filter-group" id="filter-group-lucro-s" style="display: none;">
+            <label for="filter-min-profit-s-display">Lucro S (%):</label>
+            <select id="filter-min-profit-s-display">
+              <option value="0">Todos > 0</option>
+              <option value="0.20">>= 0.20%</option>
+              <option value="0.50">>= 0.50%</option>
+              <option value="1.0">>= 1.0%</option>
+              <option value="1.5">>= 1.5%</option>
+              <option value="2.0">>= 2.0%</option>
+              <option value="3.0">>= 3.0%</option>
+              <option value="5.0">>= 5.0%</option>
+            </select>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="table-section">
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="sortable" onclick="sortByColumn('pair')">PAR <span class="sort-arrow" id="sort-arrow-pair"></span></th>
+                <th>COMPRA</th>
+                <th>VENDA</th>
+                <th class="sortable" onclick="sortByColumn('netSpreadPercentage')">LUCRO E. (%) <span class="sort-arrow" id="sort-arrow-netSpreadPercentage"></span></th>
+                <th class="sortable" onclick="sortByColumn('lucroS')">LUCRO S. (%) <span class="sort-arrow" id="sort-arrow-lucroS"></span></th>
+                <th class="sortable" onclick="sortByColumn('volume')">VOLUMES (SPOT/FUT) <span class="sort-arrow" id="sort-arrow-volume"></span></th>
+                <th class="sortable" onclick="sortByColumn('fundingRate')">FINANC. (REF) <span class="sort-arrow" id="sort-arrow-fundingRate"></span></th>
+                <th>QTD. SUG. <span id="qty-sug-base-unit-header">(USD)</span></th>
+                <th class="sortable" onclick="sortByColumn('firstSeen')">TIME <span class="sort-arrow" id="sort-arrow-firstSeen"></span></th>
+                <th>AÇÕES</th>
+              </tr>
+            </thead>
+            <tbody id="opportunities-table-body">
+              <tr><td colspan="10" class="no-data">Aguardando oportunidades de arbitragem...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="blocked-section" id="blocked-section">
+        <div class="section-header">
+          <h3>Oportunidades Bloqueadas (<span id="blocked-ops-count">0</span>)</h3>
+          <button class="toggle-button" id="toggle-blocked-ops">
+            <svg class="icon-small" id="eye-icon" viewBox="0 0 24 24" fill="none">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/>
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            <svg class="icon-small" id="eye-off-icon" viewBox="0 0 24 24" style="display: none;" fill="none">
+              <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22M8.71 8.71a3 3 0 114.24 4.24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Esconder Oportunidades Bloqueadas</span>
+          </button>
+        </div>
+        <div class="table-container" id="blocked-ops-table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>PAR</th>
+                <th>COMPRA (Snapshot)</th>
+                <th>VENDA (Snapshot)</th>
+                <th>LUCRO E. (%) (Ao Vivo)</th>
+                <th>LUCRO S. (%) (Ao Vivo)</th>
+                <th>VOLUMES (Ao Vivo)</th>
+                <th>FINANC. (Ao Vivo)</th>
+                <th>AÇÕES</th>
+              </tr>
+            </thead>
+            <tbody id="blocked-ops-table-body">
+              <tr><td colspan="8" class="no-data">Nenhuma oportunidade bloqueada.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="monitor-section" id="monitor-section">
+        <div class="section-header clickable" id="monitor-pares-header">
+          <h3>Monitor de Pares (<span id="pair-count-monitor">0</span> Entradas) <span class="toggle-icon" id="monitor-pares-toggle-icon">[+]</span></h3>
+        </div>
+        <div class="table-container" id="monitor-pares-table-container" style="display: none;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>CORRETORA</th>
+                <th>PAR</th>
+                <th>SPOT (Ask)</th>
+                <th>FUTURES (Ask)</th>
+                <th>SPOT (Bid)</th>
+                <th>FUTURES (Bid)</th>
+                <th>TS SPOT</th>
+                <th>TS FUTURES</th>
+              </tr>
+            </thead>
+            <tbody id="pairs-table-body">
+              <tr><td colspan="8" class="no-data">Aguardando dados dos pares... (Clique no cabeçalho acima para expandir)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <footer class="main-footer">
+        <p id="footer-info">
+          Taxas MEXC: Spot <span id="mexc-spot-fee">?</span>% |
+          Futuros <span id="mexc-futures-fee">?</span>% ||
+          Taxas Gate.io: Spot <span id="gateio-spot-fee">?</span>% |
+          Futuros <span id="gateio-futures-fee">?</span>% ||
+          Lucro Mín. Global: <span id="min-profit">?</span>%
+        </p>
+      </footer>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
