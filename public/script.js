@@ -57,7 +57,7 @@ window.frontendState = state;
 
 const FAVORITES_STORAGE_KEY = 'arbitrageDashboard_favoritedOps_v1';
 const BLOCKED_STORAGE_KEY = 'arbitrageDashboard_blockedOps_v2'; 
-const WATCHED_PAIRS_STORAGE_KEY = 'arbitrageDashboard_watchedPairs_v2';
+// const WATCHED_PAIRS_STORAGE_KEY = 'arbitrageDashboard_watchedPairs_v2'; // Não é mais necessário
 const THEME_STORAGE_KEY = 'arbitrageDashboard_theme_v1'; 
 
 // Ícones SVG para expandir/recolher
@@ -575,27 +575,42 @@ function saveBlockedOps() {
   localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(state.blockedOps)); 
 }
 
-function loadWatchedPairs() {
-  const stored = localStorage.getItem(WATCHED_PAIRS_STORAGE_KEY);
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      // Garante que o valor carregado é um array antes de atribuí-lo
-      state.watchedPairsList = Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      console.error("Falha ao analisar os pares vigiados do localStorage", e);
-      // Se a análise falhar, redefine para uma lista vazia
-      state.watchedPairsList = [];
+async function loadWatchedPairs() {
+  try {
+    const response = await fetch('/api/users/settings'); // Busca todas as configs do usuário logado
+    if (response.ok) {
+        const settings = await response.json();
+        state.watchedPairsList = settings.watchedPairs || []; // Pega a lista de pares da resposta
+        if (watchedPairsCountEl) {
+            watchedPairsCountEl.textContent = state.watchedPairsList.length;
+        }
+        requestUiUpdate(); // Atualiza a tabela na interface
+    } else {
+        console.error("Não foi possível carregar os pares vigiados do servidor.");
+        state.watchedPairsList = []; // Garante que a lista esteja vazia em caso de erro
     }
-  } else {
-    // Se não houver nada armazenado, começa com uma lista vazia
+  } catch (error) {
+    console.error("Erro de conexão ao carregar pares vigiados:", error);
     state.watchedPairsList = [];
   }
 }
 
-function saveWatchedPairs() { 
-    localStorage.setItem(WATCHED_PAIRS_STORAGE_KEY, JSON.stringify(state.watchedPairsList));
-    if (watchedPairsCountEl) watchedPairsCountEl.textContent = state.watchedPairsList.length;
+async function saveWatchedPairs() {
+    if (watchedPairsCountEl) {
+        watchedPairsCountEl.textContent = state.watchedPairsList.length;
+    }
+    try {
+        // Enviamos apenas a lista de pares para não sobrescrever outras configurações
+        // A API no backend está preparada para receber apenas este campo
+        await fetch('/api/users/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ watchedPairs: state.watchedPairsList })
+        });
+    } catch (error) {
+        console.error("Erro ao salvar pares vigiados no servidor:", error);
+        // Opcional: Adicionar uma notificação de erro para o usuário na UI
+    }
 }
 
 function addWatchedPair() { 
@@ -1211,6 +1226,27 @@ function toggleMonitorPares() {
   }
 }
 
+// --- ADICIONADO: FUNÇÃO PARA CONTROLAR O BOTÃO DE LOGOUT ---
+function setupLogoutButton() {
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/users/logout', { method: 'POST' });
+                if (response.ok) {
+                    // Redireciona para a página de login após o logout
+                    window.location.href = '/login.html';
+                } else {
+                   alert('Falha ao fazer logout.');
+                }
+            } catch (error) {
+                console.error('Erro ao fazer logout:', error);
+                alert('Erro de conexão ao tentar fazer logout.');
+            }
+        });
+    }
+}
+
 function connectWebSocket() { 
   let wsUrl = window.location.origin.replace(/^http/, 'ws'); 
   ws = new WebSocket(wsUrl); 
@@ -1325,6 +1361,7 @@ function init() {
   if (soundProfitThresholdInputEl) soundProfitThresholdInputEl.value = state.soundProfitThreshold;
   
   setupEventListeners();
+  setupLogoutButton(); // ADICIONADO A CHAMADA PARA A FUNÇÃO DE LOGOUT
   setCurrentView('arbitragens');
   connectWebSocket();
   fetchConfigAndUpdateUI();

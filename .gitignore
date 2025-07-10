@@ -1,0 +1,8 @@
+# Ignorar dependências do Node.js
+node_modules
+
+# Ignorar arquivos de ambiente com segredos
+.env
+
+# Ignorar arquivos de log que o bot possa gerar
+*.log
