@@ -30,26 +30,26 @@ body.dark {
   --primary-color: #58a6ff; 
   --positive-color: #3fb950;
   --negative-color: #f85149;
-  --background-color: #0d1117; 
-  --card-background: #161b22;   
-  --border-color: #30363d;    
-  --text-primary: #c9d1d9;     
-  --text-secondary: #8b949e;  
-  --header-background: #161b22;
+  --background-color: #1a202c; /* Clareado de #0d1117 para #1a202c */
+  --card-background: #2d3748;   /* Clareado de #161b22 para #2d3748 */
+  --border-color: #4a5568;    /* Clareado de #30363d para #4a5568 */
+  --text-primary: #e2e8f0;     /* Clareado de #c9d1d9 para #e2e8f0 */
+  --text-secondary: #a0aec0;  /* Clareado de #8b949e para #a0aec0 */
+  --header-background: #2d3748;
   --warning-color: #f0b90b;
   --favorited-color: #ffd700; 
   --gateio-color: #4dabf7;
   --mexc-color: #36a2eb;
-  --gateio-text-color: #0d1117;
-  --mexc-text-color: #0d1117;
+  --gateio-text-color: #e2e8f0;
+  --mexc-text-color: #e2e8f0;
 
-  --table-header-bg: #1c2128;
-  --table-row-hover-bg: #22272e;
-  --button-text-color: #c9d1d9;
-  --copy-button-bg: #495057;
-  --sidebar-background: #161b22;
-  --sidebar-border: #30363d;
-  --sidebar-hover: #22272e;
+  --table-header-bg: #2d3748;
+  --table-row-hover-bg: #4a5568;
+  --button-text-color: #e2e8f0;
+  --copy-button-bg: #4a5568;
+  --sidebar-background: #2d3748;
+  --sidebar-border: #4a5568;
+  --sidebar-hover: #4a5568;
   --sidebar-active: #58a6ff;
   --sidebar-active-text: #ffffff;
 }
@@ -1002,3 +1002,424 @@ body.dark .watched-pair-tag {
     gap: 12px;
   }
 }
+
+/* ===== ESTILOS MELHORADOS PARA AUTENTICAÇÃO ===== */
+
+/* Container principal de autenticação */
+.auth-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--background-color) 0%, rgba(30, 136, 229, 0.05) 100%);
+  padding: 20px;
+}
+
+body.dark .auth-container {
+  background: linear-gradient(135deg, var(--background-color) 0%, rgba(88, 166, 255, 0.05) 100%);
+}
+
+/* Caixa de autenticação */
+.auth-box {
+  background: var(--card-background);
+  padding: 30px; /* Reduzido de 40px para 30px */
+  border-radius: 10px; /* Reduzido de 12px para 10px */
+  border: 1px solid var(--border-color);
+  width: 100%;
+  max-width: 360px; /* Reduzido de 400px para 360px */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); /* Ajustado sombra */
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+body.dark .auth-box {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.auth-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary-color), var(--positive-color));
+}
+
+/* Título principal */
+.auth-box h1 {
+  color: var(--primary-color);
+  margin-bottom: 10px; /* Reduzido de 12px para 10px */
+  font-size: 2em; /* Reduzido de 2.2em para 2em */
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+/* Subtítulo e descrição */
+.auth-subtitle {
+  color: var(--text-secondary);
+  margin-bottom: 20px; /* Reduzido de 24px para 20px */
+  font-size: 0.95em; /* Reduzido de 1em para 0.95em */
+  line-height: 1.5;
+}
+
+.auth-description {
+  color: var(--text-secondary);
+  margin-bottom: 20px; /* Reduzido de 24px para 20px */
+  font-size: 0.9em; /* Reduzido de 0.95em para 0.9em */
+  line-height: 1.6;
+}
+
+/* Formulário */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px; /* Reduzido de 20px para 16px */
+  text-align: left;
+}
+
+/* Grupos de formulário */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px; /* Reduzido de 6px para 4px */
+}
+
+.form-group label {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.85em; /* Reduzido de 0.9em para 0.85em */
+  margin-bottom: 0px; /* Reduzido de 2px para 0px */
+}
+
+/* Inputs */
+.auth-form input[type="email"],
+.auth-form input[type="password"],
+.auth-form input[type="text"],
+.auth-form input[type="tel"] {
+  padding: 12px 16px; /* Reduzido de 14px 18px para 12px 16px */
+  border-radius: 8px; /* Reduzido de 10px para 8px */
+  border: 1px solid var(--border-color);
+  background: var(--background-color);
+  color: var(--text-primary);
+  font-size: 0.9em; /* Reduzido de 0.95em para 0.9em */
+  width: 100%;
+  transition: all 0.3s ease;
+  font-family: inherit;
+}
+
+.auth-form input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+  outline: none;
+  background: var(--card-background);
+}
+
+body.dark .auth-form input:focus {
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+}
+
+.auth-form input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+/* Container de senha com botão de mostrar/esconder */
+.password-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-container input {
+  padding-right: 40px; /* Ajustado para acomodar o ícone */
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px; /* Ajustado para melhor posicionamento */
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px; /* Reduzido de 6px para 4px */
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  border-radius: 4px;
+}
+
+.password-toggle:hover {
+  color: var(--primary-color);
+  background: rgba(30, 136, 229, 0.1);
+}
+
+.password-toggle svg {
+  width: 16px; /* Reduzido de 18px para 16px */
+  height: 16px; /* Reduzido de 18px para 16px */
+}
+
+/* Indicador de força da senha */
+.password-strength {
+  margin-top: 4px; /* Reduzido de 6px para 4px */
+}
+
+.strength-bar {
+  width: 100%;
+  height: 2px; /* Reduzido de 3px para 2px */
+  background: var(--border-color);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-bottom: 2px; /* Reduzido de 4px para 2px */
+}
+
+.strength-fill {
+  height: 100%;
+  width: 0%;
+  transition: all 0.3s ease;
+  border-radius: 1px;
+}
+
+.strength-fill.weak {
+  width: 25%;
+  background: var(--negative-color);
+}
+
+.strength-fill.fair {
+  width: 50%;
+  background: var(--warning-color);
+}
+
+.strength-fill.good {
+  width: 75%;
+  background: #2196f3;
+}
+
+.strength-fill.strong {
+  width: 100%;
+  background: var(--positive-color);
+}
+
+.strength-text {
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Link de esqueceu a senha */
+.forgot-password-link {
+  text-align: right;
+  margin-top: 4px; /* Reduzido de 6px para 4px */
+}
+
+.forgot-password-link a {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-size: 0.8em; /* Reduzido de 0.85em para 0.8em */
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.forgot-password-link a:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+/* Botão principal */
+.auth-button {
+  padding: 12px 18px; /* Reduzido de 14px 20px para 12px 18px */
+  border: none;
+  border-radius: 8px; /* Reduzido de 10px para 8px */
+  background: linear-gradient(135deg, var(--primary-color), #1976d2);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 1em; /* Reduzido de 1.05em para 1em */
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px; /* Reduzido de 8px para 6px */
+  margin-top: 4px; /* Reduzido de 6px para 4px */
+}
+
+.auth-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(30, 136, 229, 0.3); /* Ajustado sombra */
+}
+
+.auth-button:active {
+  transform: translateY(0);
+}
+
+.auth-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 16px; /* Reduzido de 18px para 16px */
+  height: 16px; /* Reduzido de 18px para 16px */
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Mensagens de erro e sucesso */
+.auth-message {
+  text-align: center;
+  margin-top: 12px; /* Reduzido de 16px para 12px */
+  font-size: 0.85em; /* Reduzido de 0.9em para 0.85em */
+  font-weight: 500;
+  padding: 8px 12px; /* Reduzido de 10px 14px para 8px 12px */
+  border-radius: 5px; /* Reduzido de 6px para 5px */
+  display: none;
+}
+
+.auth-message.error {
+  color: var(--negative-color);
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.2);
+  display: block;
+}
+
+.auth-message.success {
+  color: var(--positive-color);
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.2);
+  display: block;
+}
+
+/* Dica de senha */
+.password-hint {
+  color: var(--text-secondary);
+  font-size: 0.7em; /* Reduzido de 0.75em para 0.7em */
+  margin-top: -4px; /* Ajustado */
+  margin-bottom: 4px; /* Ajustado */
+  line-height: 1.4;
+}
+
+/* Footer de autenticação */
+.auth-footer {
+  margin-top: 20px; /* Reduzido de 24px para 20px */
+  padding-top: 16px; /* Reduzido de 18px para 16px */
+  border-top: 1px solid var(--border-color);
+}
+
+.auth-link {
+  text-align: center;
+  margin-top: 16px; /* Reduzido de 18px para 16px */
+  font-size: 0.85em; /* Reduzido de 0.9em para 0.85em */
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.auth-link a {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.auth-link a:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.terms-text {
+  font-size: 0.75em; /* Reduzido de 0.8em para 0.75em */
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.terms-text a {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.terms-text a:hover {
+  text-decoration: underline;
+}
+
+/* Formulário de reset de senha */
+.reset-form {
+  margin-top: 20px; /* Reduzido de 24px para 20px */
+  padding-top: 16px; /* Reduzido de 18px para 16px */
+  border-top: 1px solid var(--border-color);
+}
+
+.reset-form-header {
+  margin-bottom: 16px; /* Reduzido de 20px para 16px */
+}
+
+.reset-form-header h3 {
+  color: var(--primary-color);
+  font-size: 1.2em; /* Reduzido de 1.3em para 1.2em */
+  margin-bottom: 4px; /* Reduzido de 6px para 4px */
+  font-weight: 600;
+}
+
+.reset-form-header p {
+  color: var(--text-secondary);
+  font-size: 0.85em; /* Reduzido de 0.9em para 0.85em */
+  line-height: 1.5;
+}
+
+/* Responsividade para autenticação */
+@media (max-width: 768px) {
+  .auth-container {
+    padding: 12px; /* Reduzido de 16px para 12px */
+  }
+  
+  .auth-box {
+    padding: 24px 18px; /* Reduzido de 32px 24px para 24px 18px */
+    max-width: 100%;
+  }
+  
+  .auth-box h1 {
+    font-size: 1.8em; /* Reduzido de 2em para 1.8em */
+  }
+  
+  .auth-form {
+    gap: 14px; /* Reduzido de 16px para 14px */
+  }
+  
+  .auth-form input[type="email"],
+  .auth-form input[type="password"],
+  .auth-form input[type="text"],
+  .auth-form input[type="tel"] {
+    padding: 10px 14px; /* Reduzido de 14px 16px para 10px 14px */
+  }
+  
+  .auth-button {
+    padding: 10px 16px; /* Reduzido de 14px 20px para 10px 16px */
+    font-size: 0.95em; /* Reduzido de 1em para 0.95em */
+  }
+}
+
+/* Ajustes para a variável RGB da primary-color */
+:root {
+  --primary-color-rgb: 30, 136, 229; /* RGB de #1e88e5 */
+}
+
+body.dark {
+  --primary-color-rgb: 88, 166, 255; /* RGB de #58a6ff */
+}
+

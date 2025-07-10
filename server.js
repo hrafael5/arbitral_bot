@@ -201,7 +201,7 @@ const shutdown = () => {
 };
 
 // --- 6. INÍCIO DA EXECUÇÃO ---
-sequelize.sync()
+sequelize.sync({ alter: true })
     .then(() => {
         mySessionStore.sync();
         logger.info("Database and session store synchronized.");
