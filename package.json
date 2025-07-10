@@ -11,6 +11,7 @@
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
+    "connect-session-sequelize": "^8.0.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
     "express": "^4.21.2",

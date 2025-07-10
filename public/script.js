@@ -199,18 +199,21 @@ function copiarParaClipboard(texto, buttonElement) {
     }
 }
 
+// --- CORREÇÃO 1: Ajuste na lógica para gerar o link da Gate.io corretamente ---
 function getExchangeUrl(exchange, instrument, pair) {
     const pairForURL = pair.replace('/', '_').toUpperCase();
-    const exchangeLower = exchange.toLowerCase().replace('.io', '');
+    const exchangeLower = (exchange || '').toLowerCase(); // Apenas convertemos para minúsculas
     const instrumentUpper = (instrument || '').toUpperCase();
     const finalInstrument = (instrumentUpper === 'SPOT' || instrumentUpper === 'PONTO') ? 'spot' : 'futures';
+
     if (exchangeLower === 'mexc') {
         return finalInstrument === 'spot' ? `https://www.mexc.com/exchange/${pairForURL}?type=spot` : `https://futures.mexc.com/exchange/${pairForURL}`;
-    } else if (exchangeLower === 'gate') {
+    } else if (exchangeLower === 'gateio' || exchangeLower === 'gate.io') { // Agora checa por 'gateio' ou 'gate.io'
         return finalInstrument === 'spot' ? `https://www.gate.io/trade/${pairForURL}` : `https://www.gate.io/futures_trade/USDT/${pairForURL}`;
     }
     return null;
 }
+
 
 function abrirJanelaDeGrafico(url, windowName, position) {
     if (!url) return;
@@ -577,17 +580,17 @@ function saveBlockedOps() {
 
 async function loadWatchedPairs() {
   try {
-    const response = await fetch('/api/users/settings'); // Busca todas as configs do usuário logado
+    const response = await fetch('/api/users/settings');
     if (response.ok) {
         const settings = await response.json();
-        state.watchedPairsList = settings.watchedPairs || []; // Pega a lista de pares da resposta
+        state.watchedPairsList = settings.watchedPairs || [];
         if (watchedPairsCountEl) {
             watchedPairsCountEl.textContent = state.watchedPairsList.length;
         }
-        requestUiUpdate(); // Atualiza a tabela na interface
+        requestUiUpdate();
     } else {
         console.error("Não foi possível carregar os pares vigiados do servidor.");
-        state.watchedPairsList = []; // Garante que a lista esteja vazia em caso de erro
+        state.watchedPairsList = [];
     }
   } catch (error) {
     console.error("Erro de conexão ao carregar pares vigiados:", error);
@@ -600,8 +603,6 @@ async function saveWatchedPairs() {
         watchedPairsCountEl.textContent = state.watchedPairsList.length;
     }
     try {
-        // Enviamos apenas a lista de pares para não sobrescrever outras configurações
-        // A API no backend está preparada para receber apenas este campo
         await fetch('/api/users/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -609,7 +610,6 @@ async function saveWatchedPairs() {
         });
     } catch (error) {
         console.error("Erro ao salvar pares vigiados no servidor:", error);
-        // Opcional: Adicionar uma notificação de erro para o usuário na UI
     }
 }
 
@@ -1226,7 +1226,6 @@ function toggleMonitorPares() {
   }
 }
 
-// --- ADICIONADO: FUNÇÃO PARA CONTROLAR O BOTÃO DE LOGOUT ---
 function setupLogoutButton() {
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) {
@@ -1234,14 +1233,10 @@ function setupLogoutButton() {
             try {
                 const response = await fetch('/api/users/logout', { method: 'POST' });
                 if (response.ok) {
-                    // Redireciona para a página de login após o logout
                     window.location.href = '/login.html';
-                } else {
-                   alert('Falha ao fazer logout.');
                 }
             } catch (error) {
                 console.error('Erro ao fazer logout:', error);
-                alert('Erro de conexão ao tentar fazer logout.');
             }
         });
     }
@@ -1250,10 +1245,49 @@ function setupLogoutButton() {
 function connectWebSocket() { 
   let wsUrl = window.location.origin.replace(/^http/, 'ws'); 
   ws = new WebSocket(wsUrl); 
-  ws.onopen = () => { state.connected = true; requestUiUpdate(); ws.send(JSON.stringify({ type: 'request_latest_data' })); }; 
-  ws.onmessage = (event) => { try { const message = JSON.parse(event.data); state.lastUpdated = new Date(); let UINeedsUpdate = false; if (message.type === "opportunity") { const { data: opportunityData } = message; const now = Date.now(); let opWrapper = state.arbitrageOpportunities.find(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction); if (opWrapper) { opWrapper.data = opportunityData; opWrapper.lastSignaled = opportunityData.timestamp || now; } else { state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: now, lastSignaled: (opportunityData.timestamp || now) }); } UINeedsUpdate = true; } else if (message.type === "opportunities") { const now = Date.now(); state.arbitrageOpportunities = (message.data || []).map(oppData => ({ data: oppData, firstSeen: oppData.timestamp || now, lastSignaled: oppData.timestamp || now })); UINeedsUpdate = true; } else if (message.type === "all_pairs_update") { state.allPairsData = message.data || []; UINeedsUpdate = true; } if (UINeedsUpdate) requestUiUpdate(); } catch (error) { console.error("FRONTEND: Erro msg WebSocket:", error, event.data); } }; 
-  ws.onerror = () => { state.connected = false; requestUiUpdate();}; 
-  ws.onclose = () => { state.connected = false; requestUiUpdate(); setTimeout(connectWebSocket, 5000);}; 
+  ws.onopen = () => { 
+      state.connected = true; 
+      requestUiUpdate(); 
+      ws.send(JSON.stringify({ type: 'request_latest_data' })); 
+  }; 
+  ws.onmessage = (event) => {
+      try { 
+        const message = JSON.parse(event.data);
+        state.lastUpdated = new Date();
+        let UINeedsUpdate = false;
+        if (message.type === "opportunity") {
+            const { data: opportunityData } = message;
+            const now = Date.now();
+            let opWrapper = state.arbitrageOpportunities.find(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
+            if (opWrapper) {
+                opWrapper.data = opportunityData;
+                opWrapper.lastSignaled = opportunityData.timestamp || now;
+            } else {
+                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: now, lastSignaled: (opportunityData.timestamp || now) });
+            }
+            UINeedsUpdate = true;
+        } else if (message.type === "opportunities") {
+            const now = Date.now();
+            state.arbitrageOpportunities = (message.data || []).map(oppData => ({ data: oppData, firstSeen: oppData.timestamp || now, lastSignaled: oppData.timestamp || now }));
+            UINeedsUpdate = true;
+        } else if (message.type === "all_pairs_update") {
+            state.allPairsData = message.data || [];
+            UINeedsUpdate = true;
+        }
+        if (UINeedsUpdate) requestUiUpdate();
+    } catch (error) {
+        console.error("FRONTEND: Erro msg WebSocket:", error, event.data);
+    }
+  }; 
+  ws.onerror = () => { 
+      state.connected = false; 
+      requestUiUpdate();
+  }; 
+  ws.onclose = () => { 
+      state.connected = false; 
+      requestUiUpdate(); 
+      setTimeout(connectWebSocket, 5000);
+  }; 
 }
 
 function fetchConfigAndUpdateUI() { 
@@ -1361,11 +1395,12 @@ function init() {
   if (soundProfitThresholdInputEl) soundProfitThresholdInputEl.value = state.soundProfitThreshold;
   
   setupEventListeners();
-  setupLogoutButton(); // ADICIONADO A CHAMADA PARA A FUNÇÃO DE LOGOUT
+  setupLogoutButton();
   setCurrentView('arbitragens');
-  connectWebSocket();
   fetchConfigAndUpdateUI();
   updateAllUI();
+  
+  connectWebSocket(); 
 }
 
 window.openExchangeTradingPage = (exchange, instrument, pair) => {
