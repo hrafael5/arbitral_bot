@@ -1,6 +1,6 @@
 // --- 1. DEPENDÊNCIAS ---
 const express = require('express');
-const http = require('http');
+const http = require('http' );
 const cors = require('cors');
 const ini = require('ini');
 const fs = require('fs');
@@ -79,7 +79,7 @@ const config = ini.parse(fs.readFileSync(path.resolve(__dirname, "conf.ini"), "u
 
 // Inicializar Express e Servidor HTTP
 const app = express();
-const server = http.createServer(app);
+const server = http.createServer(app );
 
 // Configurar Sessão
 const mySessionStore = new SequelizeStore({ db: sequelize });
@@ -94,7 +94,7 @@ const sessionMiddleware = session({
         httpOnly: true, 
         maxAge: 7 * 24 * 60 * 60 * 1000 
     }
-});
+} );
 
 // Configurar WebSocket Server
 const wss = new WebSocket.Server({ noServer: true });
@@ -201,20 +201,43 @@ const shutdown = () => {
 };
 
 // --- 6. INÍCIO DA EXECUÇÃO ---
-sequelize.sync({ alter: true })
-    .then(() => {
-        mySessionStore.sync();
-        logger.info("Database and session store synchronized.");
+// CORREÇÃO APLICADA AQUI
+async function startServer() {
+    try {
+        await sequelize.sync({ alter: true });
+        logger.info("Database schema synchronized.");
+
+        // Verifica se existe algum usuário. Se não, cria um usuário padrão.
+        const userCount = await User.count();
+        if (userCount === 0) {
+            logger.info("No users found in the database. Creating a default admin user...");
+            const defaultUser = await User.create({
+                name: 'Admin',
+                email: 'admin@admin.com',
+                password: 'ChangeMe123!', // Use uma senha forte
+                emailVerified: true
+            });
+            await UserConfiguration.create({ UserId: defaultUser.id });
+            logger.info("Default admin user created successfully. Please change the password.");
+        }
+
+        await mySessionStore.sync();
+        logger.info("Session store synchronized.");
+
         const PORT = process.env.PORT || 3000;
         server.listen(PORT, () => {
             logger.info(`Server listening on port ${PORT}.`);
             initializeAndStartBot();
         });
-    })
-    .catch(err => {
-        logger.error(`[CRITICAL] Could not connect/sync to the database: ${err.message}`);
+
+    } catch (err) {
+        logger.error(`[CRITICAL] Could not start the server: ${err.message}`);
+        console.error(err); // Log completo do erro para depuração
         process.exit(1);
-    });
+    }
+}
+
+startServer(); // Inicia a função assíncrona
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

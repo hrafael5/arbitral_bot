@@ -5,7 +5,10 @@ const bcrypt = require('bcrypt');
 const User = sequelize.define('User', {
   name: {
     type: DataTypes.STRING,
-    allowNull: false,
+    // --- CORREÇÃO APLICADA AQUI ---
+    allowNull: true, // Alterado de 'false' para 'true'
+    defaultValue: 'Usuário', // Adicionado um valor padrão
+    // -----------------------------
     validate: {
       notEmpty: {
         msg: "O nome é obrigatório."
@@ -197,4 +200,3 @@ User.prototype.isEmailVerificationTokenValid = function(token) {
 };
 
 module.exports = User;
-

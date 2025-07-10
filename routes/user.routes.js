@@ -114,7 +114,7 @@ router.post('/register', async (req, res) => {
     // Capturar erros de validação do Sequelize
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages[0] });
+      return res.status(400).json({ message: messages.join(' ') });
     }
     
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -373,7 +373,7 @@ router.post('/reset-password', async (req, res) => {
     // Retornar erro de validação de senha fraca, se houver
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages[0] });
+      return res.status(400).json({ message: messages.join(' ') });
     }
     
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -440,7 +440,7 @@ router.put('/profile', async (req, res) => {
     
     if (error.name === 'SequelizeValidationError') {
       const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages[0] });
+      return res.status(400).json({ message: messages.join(' ') });
     }
     
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -488,4 +488,3 @@ router.post('/settings', async (req, res) => {
 });
 
 module.exports = router;
-
