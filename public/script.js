@@ -161,41 +161,14 @@ function arredondarQuantidadeSugerida(qtdFloat) {
 function copiarParaClipboard(texto, buttonElement) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(String(texto)).then(() => {
-            const tooltip = document.createElement('div');
-            tooltip.textContent = 'Qtd. Copiada!';
-            tooltip.style.position = 'fixed';
-            tooltip.style.left = '50%';
-            tooltip.style.top = '20px';
-            tooltip.style.transform = 'translateX(-50%)';
-            tooltip.style.padding = '10px 20px';
-            tooltip.style.background = '#238636';
-            tooltip.style.color = 'white';
-            tooltip.style.borderRadius = '5px';
-            tooltip.style.zIndex = '10000';
-            tooltip.style.transition = 'opacity 0.5s ease-out';
-            document.body.appendChild(tooltip);
-            setTimeout(() => {
-                tooltip.style.opacity = '0';
-                setTimeout(() => {
-                    if (document.body.contains(tooltip)) {
-                        document.body.removeChild(tooltip);
-                    }
-                }, 500);
-            }, 1500);
-
-            if (buttonElement) {
+            if(buttonElement){
                 const originalText = buttonElement.textContent;
                 buttonElement.textContent = '✓';
-                setTimeout(() => {
-                    buttonElement.textContent = originalText;
-                }, 1000);
+                setTimeout(() => { buttonElement.textContent = originalText; }, 1000);
             }
         }).catch(err => {
             console.error('FRONTEND: Falha ao copiar:', err);
-            alert('Falha ao copiar. Verifique as permissões do navegador (a página precisa ser HTTPS ou localhost).');
         });
-    } else {
-        alert('A função de copiar não é suportada ou está bloqueada neste navegador (a página precisa ser HTTPS ou localhost).');
     }
 }
 
@@ -213,7 +186,6 @@ function getExchangeUrl(exchange, instrument, pair) {
     }
     return null;
 }
-
 
 function abrirJanelaDeGrafico(url, windowName, position) {
     if (!url) return;
@@ -236,7 +208,7 @@ function abrirCalculadora(pair, direction, buyEx, sellEx) {
     const top = (window.screen.availHeight / 2) - (popHeight / 2);
     const features = `width=${popWidth},height=${popHeight},top=${top},left=${left},resizable=yes,scrollbars=yes`;
     const calcWindow = window.open('', windowName, features);
-    if (calcWindow.location.href !== url) {
+    if (!calcWindow || calcWindow.closed || typeof calcWindow.closed == 'undefined' || calcWindow.location.href.includes('about:blank')) {
         calcWindow.location.href = url;
     }
     calcWindow.focus();
@@ -263,210 +235,163 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
-    let spotUrl, futuresUrl;
-    const isBuySpot = buyInstrument.toLowerCase().includes('spot') || buyInstrument.toLowerCase().includes('ponto');
-    if (isBuySpot) {
-        spotUrl = getExchangeUrl(buyExchange, 'spot', pair);
-        futuresUrl = getExchangeUrl(sellExchange, 'futures', pair);
+    let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
+    let urlLeg2 = getExchangeUrl(sellExchange, sellInstrument, pair);
+    
+    if (urlLeg1 === urlLeg2) {
+        window.open(urlLeg1, '_blank');
     } else {
-        spotUrl = getExchangeUrl(sellExchange, 'spot', pair);
-        futuresUrl = getExchangeUrl(buyExchange, 'futures', pair);
+        abrirJanelaDeGrafico(urlLeg1, 'arbitrage_leg1_window', 'left');
+        abrirJanelaDeGrafico(urlLeg2, 'arbitrage_leg2_window', 'right');
     }
-
-    abrirJanelaDeGrafico(spotUrl, 'arbitrage_spot_window', 'left');
-    abrirJanelaDeGrafico(futuresUrl, 'arbitrage_futures_window', 'right');
     abrirCalculadora(pair, direction, buyExchange, sellExchange);
 }
 
 function toggleSidebar() {
   state.sidebarCollapsed = !state.sidebarCollapsed;
-  const isCollapsed = elements.sidebar.classList.toggle('collapsed');
-  
-  if (elements.menuIcon) elements.menuIcon.style.display = isCollapsed ? 'block' : 'none';
-  if (elements.closeIcon) elements.closeIcon.style.display = isCollapsed ? 'none' : 'block';
+  elements.sidebar.classList.toggle('collapsed');
 }
 
 function setCurrentView(view) {
   state.currentView = view;
-
   if (view === 'saida-op') {
     state.sortColumn = 'lucroS';
     state.sortDirection = 'desc';
-    if(filterGroupLucroE) filterGroupLucroE.style.display = 'none';
-    if(filterGroupLucroS) filterGroupLucroS.style.display = 'flex';
+    filterGroupLucroE.style.display = 'none';
+    filterGroupLucroS.style.display = 'flex';
   } else { 
     state.sortColumn = 'netSpreadPercentage';
     state.sortDirection = 'desc';
-    if(filterGroupLucroE) filterGroupLucroE.style.display = 'flex';
-    if(filterGroupLucroS) filterGroupLucroS.style.display = 'none';
+    filterGroupLucroE.style.display = 'flex';
+    filterGroupLucroS.style.display = 'none';
   }
-  
   document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-  
-  const activeNavElement = document.getElementById(`nav-${view.replace('-', '_')}`);
-  if (activeNavElement) {
-    activeNavElement.classList.add('active');
-  } else {
-    const fallbackElement = document.getElementById(`nav-${view}`);
-    if (fallbackElement) {
-        fallbackElement.classList.add('active');
-    }
-  }
-  
+  document.getElementById(`nav-${view}`).classList.add('active');
   updateMainTitle();
   requestUiUpdate();
 }
 
 function updateMainTitle() {
-  const filteredOpportunities = getFilteredOpportunities();
-  const count = filteredOpportunities.length;
-
-  if (state.currentView === 'arbitragens') {
-    if (elements.viewTitle) elements.viewTitle.textContent = `Arbitragens (${count})`;
-    if (elements.viewSubtitle) elements.viewSubtitle.textContent = 'Oportunidades com Lucro de Entrada positivo';
-  } else if (state.currentView === 'saida-op') {
-    if (elements.viewTitle) elements.viewTitle.textContent = `Monitor de Saída (${count})`;
-    if (elements.viewSubtitle) elements.viewSubtitle.textContent = 'Oportunidades com Lucro de Saída positivo';
-  } else if (state.currentView === 'ambos-positivos') {
-    if (elements.viewTitle) elements.viewTitle.textContent = `Ambos Positivos (${count})`;
-    if (elements.viewSubtitle) elements.viewSubtitle.textContent = 'Oportunidades com Lucro de Entrada E Saída positivos';
-  }
+    const filteredOpportunities = getFilteredOpportunities();
+    const count = filteredOpportunities.length;
+    const viewTitles = {
+        'arbitragens': 'Arbitragens',
+        'saida-op': 'Monitor de Saída',
+        'ambos-positivos': 'Ambos Positivos'
+    };
+    const viewSubtitles = {
+        'arbitragens': 'Oportunidades com Lucro de Entrada positivo',
+        'saida-op': 'Oportunidades com Lucro de Saída positivo',
+        'ambos-positivos': 'Oportunidades com Lucro de Entrada E Saída positivos'
+    };
+    if (elements.viewTitle) elements.viewTitle.textContent = `${viewTitles[state.currentView]} (${count})`;
+    if (elements.viewSubtitle) elements.viewSubtitle.textContent = viewSubtitles[state.currentView];
 }
 
 function toggleBlockedOps() {
   state.showBlockedOps = !state.showBlockedOps;
   const text = elements.toggleBlockedOps?.querySelector('span');
-  
   const blockedTableContainer = document.getElementById('blocked-ops-table-container');
-
   if (state.showBlockedOps) {
-    if (elements.eyeIcon) elements.eyeIcon.style.display = 'block';
-    if (elements.eyeOffIcon) elements.eyeOffIcon.style.display = 'none';
-    if (text) text.textContent = 'Esconder Oportunidades Bloqueadas';
-    if (blockedTableContainer) blockedTableContainer.style.display = '';
+    elements.eyeIcon.style.display = 'block';
+    elements.eyeOffIcon.style.display = 'none';
+    text.textContent = 'Esconder Oportunidades Bloqueadas';
+    blockedTableContainer.style.display = '';
   } else {
-    if (elements.eyeIcon) elements.eyeIcon.style.display = 'none';
-    if (elements.eyeOffIcon) elements.eyeOffIcon.style.display = 'block';
-    if (text) text.textContent = 'Mostrar Oportunidades Bloqueadas';
-    if (blockedTableContainer) blockedTableContainer.style.display = 'none';
+    elements.eyeIcon.style.display = 'none';
+    elements.eyeOffIcon.style.display = 'block';
+    text.textContent = 'Mostrar Oportunidades Bloqueadas';
+    blockedTableContainer.style.display = 'none';
   }
 }
 
 function getFilteredOpportunities() {
-    let filteredOpWrappers = state.arbitrageOpportunities.filter(opWrapper => {
-      const op = opWrapper.data;
+    return state.arbitrageOpportunities.filter(opWrapper => {
+        const op = opWrapper.data;
+        if (state.watchedPairsList.includes(op.pair)) return false;
+        if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
+        
+        let profitCondition = true;
+        if (state.currentView === 'arbitragens') {
+            profitCondition = op.netSpreadPercentage > 0 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay;
+        } else if (state.currentView === 'saida-op') {
+            const lucroS = calculateLucroS(op, state.allPairsData, state.config);
+            profitCondition = lucroS > 0 && lucroS >= state.filters.minProfitSFilterDisplay;
+        } else if (state.currentView === 'ambos-positivos') {
+            const lucroS = calculateLucroS(op, state.allPairsData, state.config);
+            profitCondition = op.netSpreadPercentage > 0 && lucroS > 0;
+        }
+        if (!profitCondition) return false;
+        
+        const isFutFut = (op.buyInstrument?.toLowerCase().includes('futur')) && (op.sellInstrument?.toLowerCase().includes('futur'));
+        const isSpotSpot = (op.buyInstrument?.toLowerCase().includes('spot')) && (op.sellInstrument?.toLowerCase().includes('spot'));
+        if (isFutFut && !state.config.arbitrage.enableFuturesVsFutures) return false;
+        if (isSpotSpot && !state.config.arbitrage.enableSpotVsSpot) return false;
+
+        const volume = getVolumeForFiltering(op);
+        if (state.filters.minVolume > 0 && volume < state.filters.minVolume) return false;
       
-      if (state.watchedPairsList.includes(op.pair)) {
-          return false;
-      }
-  
-      if (state.currentView === 'arbitragens') {
-          if (op.netSpreadPercentage <= 0) return false;
-          if (state.filters.minProfitEFilterDisplay > 0 && op.netSpreadPercentage < state.filters.minProfitEFilterDisplay) return false;
-      
-      } else if (state.currentView === 'saida-op') {
-          const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-          if (lucroS === null || lucroS <= 0) return false;
-          if (state.filters.minProfitSFilterDisplay > 0 && lucroS < state.filters.minProfitSFilterDisplay) return false;
-      
-      } else if (state.currentView === 'ambos-positivos') {
-          const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-          if (op.netSpreadPercentage <= 0 || lucroS === null || lucroS <= 0) return false;
-          if (state.filters.minProfitEFilterDisplay > 0 && op.netSpreadPercentage < state.filters.minProfitEFilterDisplay) return false;
-      }
-  
-      const isFutFut = (op.buyInstrument?.toLowerCase().includes('futur')) && 
-                       (op.sellInstrument?.toLowerCase().includes('futur'));
-      const isSpotSpot = (op.buyInstrument?.toLowerCase().includes('spot')) && 
-                         (op.sellInstrument?.toLowerCase().includes('spot'));
-  
-      if (isFutFut && !state.config.arbitrage.enableFuturesVsFutures) return false;
-      if (isSpotSpot && !state.config.arbitrage.enableSpotVsSpot) return false;
-      
-      const volume = getVolumeForFiltering(op);
-      if (state.filters.minVolume > 0 && volume < state.filters.minVolume) return false;
-      
-      const buyExchange = op.buyExchange?.toLowerCase();
-      const sellExchange = op.sellExchange?.toLowerCase();
-      const buyMarket = op.buyInstrument?.toLowerCase();
-      const sellMarket = op.sellInstrument?.toLowerCase();
-      
-      let buyAllowed = false;
-      let sellAllowed = false;
-      
-      if (buyExchange === 'mexc' && (buyMarket === 'spot' || buyMarket === 'ponto') && state.filters.mexcSpot) buyAllowed = true;
-      else if (buyExchange === 'mexc' && (buyMarket === 'futures' || buyMarket === 'futuros') && state.filters.mexcFutures) buyAllowed = true;
-      else if (buyExchange === 'gateio' && (buyMarket === 'spot' || buyMarket === 'ponto') && state.filters.gateioSpot) buyAllowed = true;
-      else if (buyExchange === 'gateio' && (buyMarket === 'futures' || buyMarket === 'futuros') && state.filters.gateioFutures) buyAllowed = true;
-      
-      if (sellExchange === 'mexc' && (sellMarket === 'spot' || sellMarket === 'ponto') && state.filters.mexcSpot) sellAllowed = true;
-      else if (sellExchange === 'mexc' && (sellMarket === 'futures' || sellMarket === 'futuros') && state.filters.mexcFutures) sellAllowed = true;
-      else if (sellExchange === 'gateio' && (sellMarket === 'spot' || sellMarket === 'ponto') && state.filters.gateioSpot) sellAllowed = true;
-      else if (sellExchange === 'gateio' && (sellMarket === 'futures' || sellMarket === 'futuros') && state.filters.gateioFutures) sellAllowed = true;
-      
-      if (!(buyAllowed && sellAllowed)) return false;
-  
-      const minFunding = state.filters.minFundingRate;
-      const maxFunding = state.filters.maxFundingRate;
-  
-      if (minFunding !== null || maxFunding !== null) {
-          let fundingRate = op.type === "INTER_EXCHANGE_FUT_FUT" ? op.fundingRate_sellLeg : op.fundingRate;
-          if (fundingRate === null || fundingRate === undefined) return false;
-          
-          const fundingRatePercent = fundingRate * 100;
-  
-          if (minFunding !== null && fundingRatePercent < minFunding) return false;
-          if (maxFunding !== null && fundingRatePercent > maxFunding) return false;
-      }
-  
-      const opKey = `${opWrapper.data.pair}-${opWrapper.data.direction}`;
-      if (state.blockedOps.some(blockedOp => blockedOp.key === opKey)) return false;
-  
-      return true;
+        const buyExchange = op.buyExchange?.toLowerCase();
+        const sellExchange = op.sellExchange?.toLowerCase();
+        const buyMarket = op.buyInstrument?.toLowerCase();
+        const sellMarket = op.sellInstrument?.toLowerCase();
+        
+        let buyAllowed = (buyExchange === 'mexc' && (buyMarket === 'spot' || buyMarket === 'ponto') && state.filters.mexcSpot) ||
+                         (buyExchange === 'mexc' && (buyMarket === 'futures' || buyMarket === 'futuros') && state.filters.mexcFutures) ||
+                         (buyExchange === 'gateio' && (buyMarket === 'spot' || buyMarket === 'ponto') && state.filters.gateioSpot) ||
+                         (buyExchange === 'gateio' && (buyMarket === 'futures' || buyMarket === 'futuros') && state.filters.gateioFutures);
+        
+        let sellAllowed = (sellExchange === 'mexc' && (sellMarket === 'spot' || sellMarket === 'ponto') && state.filters.mexcSpot) ||
+                          (sellExchange === 'mexc' && (sellMarket === 'futures' || sellMarket === 'futuros') && state.filters.mexcFutures) ||
+                          (sellExchange === 'gateio' && (sellMarket === 'spot' || sellMarket === 'ponto') && state.filters.gateioSpot) ||
+                          (sellExchange === 'gateio' && (sellMarket === 'futures' || sellMarket === 'futuros') && state.filters.gateioFutures);
+        
+        if (!(buyAllowed && sellAllowed)) return false;
+
+        const minFunding = state.filters.minFundingRate;
+        const maxFunding = state.filters.maxFundingRate;
+        if (minFunding !== null || maxFunding !== null) {
+            let fundingRate = op.type === "INTER_EXCHANGE_FUT_FUT" ? op.fundingRate_sellLeg : op.fundingRate;
+            if (fundingRate === null || fundingRate === undefined) return false;
+            const fundingRatePercent = fundingRate * 100;
+            if (minFunding !== null && fundingRatePercent < minFunding) return false;
+            if (maxFunding !== null && fundingRatePercent > maxFunding) return false;
+        }
+
+        return true;
     });
-  
-    return filteredOpWrappers;
 }
 
 function getVolumeForFiltering(op) {
   const isFutFutType = op.type === "INTER_EXCHANGE_FUT_FUT";
   const isSpotSpotType = op.type === "INTER_EXCHANGE_SPOT_SPOT";
-
   if (isFutFutType) {
-    const volBuy = op.futuresVolume24hUSD_buyLeg !== undefined ? op.futuresVolume24hUSD_buyLeg : op.futuresVolume24hUSD;
-    const volSell = op.futuresVolume24hUSD_sellLeg !== undefined ? op.futuresVolume24hUSD_sellLeg : op.futuresVolume24hUSD;
+    const volBuy = op.futuresVolume24hUSD_buyLeg ?? op.futuresVolume24hUSD;
+    const volSell = op.futuresVolume24hUSD_sellLeg ?? op.futuresVolume24hUSD;
     return Math.min(volBuy || 0, volSell || 0);
   } else if (isSpotSpotType) { 
-    const volBuy = op.spotVolume24hUSD_buyLeg;
-    const volSell = op.spotVolume24hUSD_sellLeg;
-    return Math.min(volBuy || 0, volSell || 0);
+    return Math.min(op.spotVolume24hUSD_buyLeg || 0, op.spotVolume24hUSD_sellLeg || 0);
   } else {
     return Math.min(op.spotVolume24hUSD || 0, op.futuresVolume24hUSD || 0);
   }
 }
 
 function applyTheme(theme) { 
-  if (theme === 'dark') { 
-    document.body.classList.add('dark'); 
-    state.isDarkTheme = true;
-  } else { 
-    document.body.classList.remove('dark'); 
-    state.isDarkTheme = false;
-  } 
-  updateThemeButton();
+    document.body.classList.toggle('dark', theme === 'dark');
+    state.isDarkTheme = theme === 'dark';
+    updateThemeButton();
 }
 
 function updateThemeButton() {
   const text = elements.themeToggleButton?.querySelector('.control-button-text');
-  
   if (state.isDarkTheme) {
-    if (elements.sunIcon) elements.sunIcon.style.display = 'none';
-    if (elements.moonIcon) elements.moonIcon.style.display = 'block';
-    if (text) text.textContent = 'Escuro';
+    elements.sunIcon.style.display = 'none';
+    elements.moonIcon.style.display = 'block';
+    if(text) text.textContent = 'Escuro';
   } else {
-    if (elements.sunIcon) elements.sunIcon.style.display = 'block';
-    if (elements.moonIcon) elements.moonIcon.style.display = 'none';
-    if (text) text.textContent = 'Claro';
+    elements.sunIcon.style.display = 'block';
+    elements.moonIcon.style.display = 'none';
+    if(text) text.textContent = 'Claro';
   }
 }
 
@@ -482,17 +407,16 @@ notificationSound.preload = 'auto';
 function updateSoundButton() {
   const button = elements.toggleSoundButton;
   const text = button?.querySelector('.control-button-text');
-  
   if (state.soundEnabled) {
     button?.classList.add('active');
-    if (elements.soundOnIcon) elements.soundOnIcon.style.display = 'block';
-    if (elements.soundOffIcon) elements.soundOffIcon.style.display = 'none';
-    if (text) text.textContent = 'Som ON';
+    elements.soundOnIcon.style.display = 'block';
+    elements.soundOffIcon.style.display = 'none';
+    if(text) text.textContent = 'Som ON';
   } else {
     button?.classList.remove('active');
-    if (elements.soundOnIcon) elements.soundOnIcon.style.display = 'none';
-    if (elements.soundOffIcon) elements.soundOffIcon.style.display = 'block';
-    if (text) text.textContent = 'Som OFF';
+    elements.soundOnIcon.style.display = 'none';
+    elements.soundOffIcon.style.display = 'block';
+    if(text) text.textContent = 'Som OFF';
   }
 }
 
@@ -521,20 +445,15 @@ function tryUnlockSoundPermission() {
       console.warn("FRONTEND: Permissão de áudio falhou.", error.name); 
       state.soundPermissionGranted = false; 
     });
-  } else { 
-    notificationSound.volume = currentVolume; 
-    console.warn("FRONTEND: Navegador não suporta playPromise, permissão de som incerta."); 
   } 
 }
 
 function playSoundNotification() { 
   if (state.soundEnabled && state.soundPermissionGranted) { 
     notificationSound.play().catch(error => { 
-      console.error("FRONTEND: Erro ao tocar som:", error); 
       if (error.name === 'NotAllowedError') { 
         state.soundPermissionGranted = false; 
         updateSoundButton(); 
-        console.warn("FRONTEND: Reprodução bloqueada."); 
       } 
     }); 
   } else if (state.soundEnabled && !state.soundPermissionGranted) { 
@@ -545,17 +464,16 @@ function playSoundNotification() {
 function updatePauseButton() {
   const button = elements.togglePauseButton;
   const text = button?.querySelector('.control-button-text');
-  
   if (state.isPaused) {
     button?.classList.add('paused');
-    if (elements.pauseIcon) elements.pauseIcon.style.display = 'none';
-    if (elements.playIcon) elements.playIcon.style.display = 'block';
-    if (text) text.textContent = 'Retomar';
+    elements.pauseIcon.style.display = 'none';
+    elements.playIcon.style.display = 'block';
+    if(text) text.textContent = 'Retomar';
   } else {
     button?.classList.remove('paused');
-    if (elements.pauseIcon) elements.pauseIcon.style.display = 'block';
-    if (elements.playIcon) elements.playIcon.style.display = 'none';
-    if (text) text.textContent = 'Pausar';
+    elements.pauseIcon.style.display = 'block';
+    elements.playIcon.style.display = 'none';
+    if(text) text.textContent = 'Pausar';
   }
 }
 
@@ -620,15 +538,7 @@ function addWatchedPair() {
     if (!state.watchedPairsList.includes(pairToAdd)) { 
       state.watchedPairsList.push(pairToAdd); 
       saveWatchedPairs(); 
-    } else {
-      const newHiddenOps = new Set();
-      state.tempHiddenWatchedOps.forEach(hiddenOpKey => {
-        if (!hiddenOpKey.startsWith(pairToAdd + '|')) {
-          newHiddenOps.add(hiddenOpKey);
-        }
-      });
-      state.tempHiddenWatchedOps = newHiddenOps;
-    }
+    } 
     requestUiUpdate();
     watchPairInputEl.value = ''; 
   } else { 
@@ -637,14 +547,12 @@ function addWatchedPair() {
 }
 
 function toggleFavorite(opKey) { 
-  if (!opKey) return; 
   const favoriteIndex = state.favoritedOps.indexOf(opKey); 
-  const blockedItemIndex = state.blockedOps.findIndex(b => b.key === opKey); 
-
   if (favoriteIndex > -1) { 
     state.favoritedOps.splice(favoriteIndex, 1); 
   } else { 
     state.favoritedOps.push(opKey); 
+    const blockedItemIndex = state.blockedOps.findIndex(b => b.key === opKey); 
     if (blockedItemIndex > -1) { 
       state.blockedOps.splice(blockedItemIndex, 1); 
       saveBlockedOps(); 
@@ -655,21 +563,13 @@ function toggleFavorite(opKey) {
 }
 
 function toggleBlock(opKey, opDataSnapshotString) {
-  if (!opKey) return;
   const blockedItemIndex = state.blockedOps.findIndex(b => b.key === opKey);
-  const favoriteIndex = state.favoritedOps.indexOf(opKey);
-
   if (blockedItemIndex > -1) { 
     state.blockedOps.splice(blockedItemIndex, 1);
   } else { 
-    try {
-      const opDataSnapshot = JSON.parse(opDataSnapshotString.replace(/&quot;/g, '"'));
-      state.blockedOps.push({ key: opKey, snapshot: opDataSnapshot });
-    } catch (e) {
-      console.error("Snapshot inválido para bloqueio:", e);
-      state.blockedOps.push({ key: opKey, snapshot: { pair: opKey.split('-')[0] } });
-    }
-    
+    const opDataSnapshot = JSON.parse(opDataSnapshotString.replace(/&quot;/g, '"'));
+    state.blockedOps.push({ key: opKey, snapshot: opDataSnapshot });
+    const favoriteIndex = state.favoritedOps.indexOf(opKey); 
     if (favoriteIndex > -1) { 
       state.favoritedOps.splice(favoriteIndex, 1); 
       saveFavorites(); 
@@ -680,19 +580,15 @@ function toggleBlock(opKey, opDataSnapshotString) {
 }
 
 function unblockOpportunity(opKeyToUnblock) {
-  if (!opKeyToUnblock) return;
   state.blockedOps = state.blockedOps.filter(blockedItem => blockedItem.key !== opKeyToUnblock);
   saveBlockedOps(); 
   requestUiUpdate(); 
 }
 
 function requestUiUpdate() {
-  if (state.isPaused && uiUpdateScheduled) return;
-  if (state.isPaused) return;
-  if (!uiUpdateScheduled) {
-    uiUpdateScheduled = true;
-    setTimeout(updateAllUI, UI_UPDATE_INTERVAL_MS);
-  }
+  if (state.isPaused || uiUpdateScheduled) return;
+  uiUpdateScheduled = true;
+  setTimeout(updateAllUI, UI_UPDATE_INTERVAL_MS);
 }
 
 function updateAllUI() { 
@@ -706,42 +602,29 @@ function updateAllUI() {
 }
 
 function updateGlobalUIState() {
-    if (elements.connectionDot && elements.connectionText) {
-        if (state.connected) {
-            elements.connectionDot.className = 'status-dot connected';
-            elements.connectionText.textContent = 'Conectado';
-        } else {
-            elements.connectionDot.className = 'status-dot disconnected';
-            elements.connectionText.textContent = 'Desconectado';
-        }
+    if (elements.connectionDot) {
+        elements.connectionDot.className = state.connected ? 'status-dot connected' : 'status-dot disconnected';
+        elements.connectionText.textContent = state.connected ? 'Conectado' : 'Desconectado';
     }
-
-    if (state.lastUpdated && elements.lastUpdated) {
-        elements.lastUpdated.textContent = 'Última atualização: ' + state.lastUpdated.toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
+    if (elements.lastUpdated) {
+        elements.lastUpdated.textContent = 'Última atualização: ' + new Date().toLocaleTimeString('pt-BR');
     }
-
     if (state.config && state.config.exchanges) {
         if (state.config.exchanges.mexc) {
-            if (elements.mexcSpotFee) elements.mexcSpotFee.textContent = (parseFloat(state.config.exchanges.mexc.spotMakerFee) * 100).toFixed(4);
-            if (elements.mexcFuturesFee) elements.mexcFuturesFee.textContent = (parseFloat(state.config.exchanges.mexc.futuresMakerFee) * 100).toFixed(4);
+            elements.mexcSpotFee.textContent = (parseFloat(state.config.exchanges.mexc.spotMakerFee) * 100).toFixed(4);
+            elements.mexcFuturesFee.textContent = (parseFloat(state.config.exchanges.mexc.futuresMakerFee) * 100).toFixed(4);
         }
         if (state.config.exchanges.gateio) {
-            if (elements.gateioSpotFee) elements.gateioSpotFee.textContent = (parseFloat(state.config.exchanges.gateio.spotMakerFee) * 100).toFixed(4);
-            if (elements.gateioFuturesFee) elements.gateioFuturesFee.textContent = (parseFloat(state.config.exchanges.gateio.futuresMakerFee) * 100).toFixed(4);
+            elements.gateioSpotFee.textContent = (parseFloat(state.config.exchanges.gateio.spotMakerFee) * 100).toFixed(4);
+            elements.gateioFuturesFee.textContent = (parseFloat(state.config.exchanges.gateio.futuresMakerFee) * 100).toFixed(4);
         }
     }
-    if (elements.minProfit && state.config && state.config.arbitrage) {
+    if (elements.minProfit && state.config.arbitrage) {
         elements.minProfit.textContent = parseFloat(state.config.arbitrage.minProfitPercentage).toFixed(2);
     }
-
     updateSoundButton();
     updatePauseButton();
     updateThemeButton();
-
     if (defaultCapitalInputEl && document.activeElement !== defaultCapitalInputEl) {
         defaultCapitalInputEl.value = state.defaultCapitalUSD > 0 ? state.defaultCapitalUSD : '';
     }
@@ -1243,47 +1126,52 @@ function setupLogoutButton() {
 }
 
 function connectWebSocket() { 
-  let wsUrl = window.location.origin.replace(/^http/, 'ws'); 
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsProtocol}//${window.location.host}`;
+  console.log(`Conectando a: ${wsUrl}`);
   ws = new WebSocket(wsUrl); 
+
   ws.onopen = () => { 
+      console.log("WebSocket conectado com sucesso!");
       state.connected = true; 
       requestUiUpdate(); 
       ws.send(JSON.stringify({ type: 'request_latest_data' })); 
   }; 
+  
   ws.onmessage = (event) => {
       try { 
         const message = JSON.parse(event.data);
         state.lastUpdated = new Date();
         let UINeedsUpdate = false;
         if (message.type === "opportunity") {
-            const { data: opportunityData } = message;
-            const now = Date.now();
-            let opWrapper = state.arbitrageOpportunities.find(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
-            if (opWrapper) {
-                opWrapper.data = opportunityData;
-                opWrapper.lastSignaled = opportunityData.timestamp || now;
+            const opportunityData = message.data;
+            const existingIndex = state.arbitrageOpportunities.findIndex(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
+            if (existingIndex > -1) {
+                state.arbitrageOpportunities[existingIndex].data = opportunityData;
             } else {
-                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: now, lastSignaled: (opportunityData.timestamp || now) });
+                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: Date.now() });
             }
             UINeedsUpdate = true;
         } else if (message.type === "opportunities") {
-            const now = Date.now();
-            state.arbitrageOpportunities = (message.data || []).map(oppData => ({ data: oppData, firstSeen: oppData.timestamp || now, lastSignaled: oppData.timestamp || now }));
-            UINeedsUpdate = true;
+            state.arbitrageOpportunities = (message.data || []).map(d => ({data:d, firstSeen: Date.now()}));
         } else if (message.type === "all_pairs_update") {
             state.allPairsData = message.data || [];
             UINeedsUpdate = true;
         }
         if (UINeedsUpdate) requestUiUpdate();
     } catch (error) {
-        console.error("FRONTEND: Erro msg WebSocket:", error, event.data);
+        console.error("FRONTEND: Erro WebSocket:", error);
     }
   }; 
-  ws.onerror = () => { 
+  
+  ws.onerror = (error) => { 
+      console.error("Erro no WebSocket:", error);
       state.connected = false; 
       requestUiUpdate();
   }; 
+  
   ws.onclose = () => { 
+      console.log("WebSocket desconectado. Tentando reconectar em 5 segundos...");
       state.connected = false; 
       requestUiUpdate(); 
       setTimeout(connectWebSocket, 5000);
@@ -1374,7 +1262,7 @@ function init() {
   loadFavorites(); 
   loadBlockedOps(); 
   loadWatchedPairs();
-  applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'light');
+  applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
   
   const savedCapital = localStorage.getItem(DEFAULT_CAPITAL_STORAGE_KEY);
   state.defaultCapitalUSD = savedCapital ? parseFloat(savedCapital) : 0;
