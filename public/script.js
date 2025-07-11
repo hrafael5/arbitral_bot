@@ -172,16 +172,15 @@ function copiarParaClipboard(texto, buttonElement) {
     }
 }
 
-// --- CORREÇÃO 1: Ajuste na lógica para gerar o link da Gate.io corretamente ---
 function getExchangeUrl(exchange, instrument, pair) {
     const pairForURL = pair.replace('/', '_').toUpperCase();
-    const exchangeLower = (exchange || '').toLowerCase(); // Apenas convertemos para minúsculas
+    const exchangeLower = (exchange || '').toLowerCase(); 
     const instrumentUpper = (instrument || '').toUpperCase();
     const finalInstrument = (instrumentUpper === 'SPOT' || instrumentUpper === 'PONTO') ? 'spot' : 'futures';
 
     if (exchangeLower === 'mexc') {
         return finalInstrument === 'spot' ? `https://www.mexc.com/exchange/${pairForURL}?type=spot` : `https://futures.mexc.com/exchange/${pairForURL}`;
-    } else if (exchangeLower === 'gateio' || exchangeLower === 'gate.io') { // Agora checa por 'gateio' ou 'gate.io'
+    } else if (exchangeLower === 'gateio' || exchangeLower === 'gate.io') { 
         return finalInstrument === 'spot' ? `https://www.gate.io/trade/${pairForURL}` : `https://www.gate.io/futures_trade/USDT/${pairForURL}`;
     }
     return null;
@@ -199,6 +198,7 @@ function abrirJanelaDeGrafico(url, windowName, position) {
     if (newWindow) newWindow.focus();
 }
 
+// --- INÍCIO DA ALTERAÇÃO ---
 function abrirCalculadora(pair, direction, buyEx, sellEx) {
     const url = `realtime_profit_calc.html?pair=${encodeURIComponent(pair)}&direction=${encodeURIComponent(direction)}&buyEx=${encodeURIComponent(buyEx)}&sellEx=${encodeURIComponent(sellEx)}`;
     const windowName = 'arbitrage_calculator_window';
@@ -207,12 +207,18 @@ function abrirCalculadora(pair, direction, buyEx, sellEx) {
     const left = (window.screen.availWidth / 2) - (popWidth / 2);
     const top = (window.screen.availHeight / 2) - (popHeight / 2);
     const features = `width=${popWidth},height=${popHeight},top=${top},left=${left},resizable=yes,scrollbars=yes`;
-    const calcWindow = window.open('', windowName, features);
-    if (!calcWindow || calcWindow.closed || typeof calcWindow.closed == 'undefined' || calcWindow.location.href.includes('about:blank')) {
-        calcWindow.location.href = url;
+    
+    // A chamada window.open agora carrega a URL diretamente.
+    // Se a janela 'arbitrage_calculator_window' já existir, o navegador a trará para frente
+    // e recarregará seu conteúdo com a nova URL. Se não existir, será criada.
+    const calcWindow = window.open(url, windowName, features);
+    
+    // Apenas focamos na janela, a lógica de checagem complexa não é mais necessária.
+    if (calcWindow) {
+        calcWindow.focus();
     }
-    calcWindow.focus();
 }
+// --- FIM DA ALTERAÇÃO ---
 
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
     let opDataToUse = null;
@@ -311,16 +317,12 @@ function getFilteredOpportunities() {
         if (state.watchedPairsList.includes(op.pair)) return false;
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
         
-        // --- INÍCIO DA ALTERAÇÃO ---
-        // Aplica o filtro de lucro com base na visualização atual
         if (state.currentView === 'arbitragens') {
             if (!(op.netSpreadPercentage > 0 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay)) {
                 return false;
             }
         } else if (state.currentView === 'saida-op') {
             const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-            // Na visualização "Saída Op", a regra é mostrar apenas se o Lucro S for estritamente positivo,
-            // ignorando completamente o Lucro E e aplicando o filtro de valor mínimo da interface.
             if (lucroS === null || lucroS <= 0 || lucroS < state.filters.minProfitSFilterDisplay) {
                 return false;
             }
@@ -330,7 +332,6 @@ function getFilteredOpportunities() {
                 return false;
             }
         }
-        // --- FIM DA ALTERAÇÃO ---
         
         const isFutFut = (op.buyInstrument?.toLowerCase().includes('futur')) && (op.sellInstrument?.toLowerCase().includes('futur'));
         const isSpotSpot = (op.buyInstrument?.toLowerCase().includes('spot')) && (op.sellInstrument?.toLowerCase().includes('spot'));
