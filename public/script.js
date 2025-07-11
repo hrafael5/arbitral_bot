@@ -199,21 +199,21 @@ function abrirJanelaDeGrafico(url, windowName, position) {
 }
 
 // --- INÍCIO DA ALTERAÇÃO ---
-function abrirCalculadora(pair, direction, buyEx, sellEx) {
+function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false) {
     const url = `realtime_profit_calc.html?pair=${encodeURIComponent(pair)}&direction=${encodeURIComponent(direction)}&buyEx=${encodeURIComponent(buyEx)}&sellEx=${encodeURIComponent(sellEx)}`;
-    const windowName = 'arbitrage_calculator_window';
+    
+    // Se forceNewWindow for true, usa '_blank' que sempre abre uma nova janela.
+    // Caso contrário, usa um nome fixo para reutilizar e substituir a mesma janela.
+    const windowName = forceNewWindow ? '_blank' : 'arbitrage_calculator_window';
+
     const popWidth = 420;
     const popHeight = 220;
     const left = (window.screen.availWidth / 2) - (popWidth / 2);
     const top = (window.screen.availHeight / 2) - (popHeight / 2);
     const features = `width=${popWidth},height=${popHeight},top=${top},left=${left},resizable=yes,scrollbars=yes`;
     
-    // A chamada window.open agora carrega a URL diretamente.
-    // Se a janela 'arbitrage_calculator_window' já existir, o navegador a trará para frente
-    // e recarregará seu conteúdo com a nova URL. Se não existir, será criada.
     const calcWindow = window.open(url, windowName, features);
     
-    // Apenas focamos na janela, a lógica de checagem complexa não é mais necessária.
     if (calcWindow) {
         calcWindow.focus();
     }
@@ -250,6 +250,7 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         abrirJanelaDeGrafico(urlLeg1, 'arbitrage_leg1_window', 'left');
         abrirJanelaDeGrafico(urlLeg2, 'arbitrage_leg2_window', 'right');
     }
+    // Chama a calculadora com o comportamento padrão (reutilizar janela)
     abrirCalculadora(pair, direction, buyExchange, sellExchange);
 }
 
@@ -1005,7 +1006,10 @@ function renderOpportunitiesTable() {
         const compraLink = `<a href="#" class="exchange-link" onclick="window.open(getExchangeUrl('${escapedBuyEx}', '${escapedBuyInst}', '${escapedPair}'), '_blank'); return false;">${getExchangeTag(op.buyExchange)} ${op.buyInstrument}<span>${formatPrice(op.buyPrice)}</span></a>`;
         const vendaLink = `<a href="#" class="exchange-link" onclick="window.open(getExchangeUrl('${escapedSellEx}', '${escapedSellInst}', '${escapedPair}'), '_blank'); return false;">${getExchangeTag(op.sellExchange)} ${op.sellInstrument}<span>${formatPrice(op.sellPrice)}</span></a>`;
         
-        const calculatorIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="calculator-icon" onclick="abrirCalculadora('${escapedPair}', '${escapedDirection}', '${escapedBuyEx}', '${escapedSellEx}')" title="Abrir Calculadora Detalhada"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="16" y1="10" x2="16" y2="10"></line><line x1="12" y1="10" x2="12" y2="10"></line><line x1="8" y1="10" x2="8" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="8" y1="14" x2="8" y2="18"></line></svg>`;
+        // --- INÍCIO DA ALTERAÇÃO ---
+        // Adiciona o parâmetro 'true' para forçar uma nova janela de calculadora a partir deste ícone.
+        const calculatorIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="calculator-icon" onclick="abrirCalculadora('${escapedPair}', '${escapedDirection}', '${escapedBuyEx}', '${escapedSellEx}', true)" title="Abrir Calculadora Detalhada em nova janela"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="16" y1="10" x2="16" y2="10"></line><line x1="12" y1="10" x2="12" y2="10"></line><line x1="8" y1="10" x2="8" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="8" y1="14" x2="8" y2="18"></line></svg>`;
+        // --- FIM DA ALTERAÇÃO ---
 
         tableHtml += `<tr>
       <td class="pair-cell">
