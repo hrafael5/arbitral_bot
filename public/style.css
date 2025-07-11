@@ -30,11 +30,11 @@ body.dark {
   --primary-color: #58a6ff; 
   --positive-color: #3fb950;
   --negative-color: #f85149;
-  --background-color: #1a202c; /* Clareado de #0d1117 para #1a202c */
-  --card-background: #2d3748;   /* Clareado de #161b22 para #2d3748 */
-  --border-color: #4a5568;    /* Clareado de #30363d para #4a5568 */
-  --text-primary: #e2e8f0;     /* Clareado de #c9d1d9 para #e2e8f0 */
-  --text-secondary: #a0aec0;  /* Clareado de #8b949e para #a0aec0 */
+  --background-color: #1a202c;
+  --card-background: #2d3748;
+  --border-color: #4a5568;
+  --text-primary: #e2e8f0;
+  --text-secondary: #a0aec0;
   --header-background: #2d3748;
   --warning-color: #f0b90b;
   --favorited-color: #ffd700; 
@@ -1423,50 +1423,59 @@ body.dark {
 }
 
 /* ===== ESTILOS PARA DEIXAR O FORMULÁRIO DE CADASTRO MENOR (ADICIONADO) ===== */
+/* Esta seção sobrepõe as regras anteriores da classe .auth-box para diminuir o tamanho */
 
 .auth-box {
-  padding: 25px; /* Diminui o espaçamento interno geral */
+  padding: 20px;
+  max-width: 380px;
 }
 
 .auth-box h1 {
-  font-size: 1.8em; /* Diminui um pouco o título principal */
-  margin-bottom: 8px; /* Menos espaço abaixo do título */
+  font-size: 1.6em;
+  margin-bottom: 5px;
 }
 
 .auth-subtitle {
-  margin-bottom: 15px; /* Menos espaço abaixo do subtítulo */
-  font-size: 0.9em;
+  margin-bottom: 10px;
+  font-size: 0.8em;
 }
 
 .auth-form {
-  gap: 12px; /* Diminui o espaço entre cada campo do formulário */
+  gap: 8px; /* Espaço entre os campos */
+}
+
+.form-group {
+  gap: 2px;
 }
 
 .form-group label {
-  font-size: 0.85em; /* Diminui a fonte do rótulo */
-  margin-bottom: 2px; /* Menos espaço entre o rótulo e o campo */
+  font-size: 0.8em;
+  margin-bottom: 0;
 }
 
 .auth-form input[type="email"],
 .auth-form input[type="password"],
 .auth-form input[type="text"],
 .auth-form input[type="tel"] {
-  padding: 10px 14px; /* Diminui a altura do campo de texto */
-  font-size: 0.9em;
+  padding: 8px 12px;
+  font-size: 0.85em;
+  border-radius: 6px;
 }
 
 .password-hint {
   font-size: 0.7em;
-  margin-top: 2px; /* Menos espaço acima da dica */
-  margin-bottom: 6px; /* Menos espaço abaixo da dica */
+  margin-top: 1px;
+  margin-bottom: 2px;
 }
 
 .auth-button {
-  padding: 12px 18px; /* Diminui a altura do botão */
-  margin-top: 5px; /* Menos espaço acima do botão */
+  padding: 10px 16px;
+  margin-top: 3px;
+  border-radius: 6px;
+  font-size: 0.95em;
 }
 
 .auth-footer {
-  margin-top: 15px; /* Menos espaço acima do rodapé */
-  padding-top: 15px;
+  margin-top: 10px;
+  padding-top: 10px;
 }
