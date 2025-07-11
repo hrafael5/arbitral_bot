@@ -311,17 +311,26 @@ function getFilteredOpportunities() {
         if (state.watchedPairsList.includes(op.pair)) return false;
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
         
-        let profitCondition = true;
+        // --- INÍCIO DA ALTERAÇÃO ---
+        // Aplica o filtro de lucro com base na visualização atual
         if (state.currentView === 'arbitragens') {
-            profitCondition = op.netSpreadPercentage > 0 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay;
+            if (!(op.netSpreadPercentage > 0 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay)) {
+                return false;
+            }
         } else if (state.currentView === 'saida-op') {
             const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-            profitCondition = lucroS > 0 && lucroS >= state.filters.minProfitSFilterDisplay;
+            // Na visualização "Saída Op", a regra é mostrar apenas se o Lucro S for estritamente positivo,
+            // ignorando completamente o Lucro E e aplicando o filtro de valor mínimo da interface.
+            if (lucroS === null || lucroS <= 0 || lucroS < state.filters.minProfitSFilterDisplay) {
+                return false;
+            }
         } else if (state.currentView === 'ambos-positivos') {
             const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-            profitCondition = op.netSpreadPercentage > 0 && lucroS > 0;
+            if (!(op.netSpreadPercentage > 0 && lucroS > 0)) {
+                return false;
+            }
         }
-        if (!profitCondition) return false;
+        // --- FIM DA ALTERAÇÃO ---
         
         const isFutFut = (op.buyInstrument?.toLowerCase().includes('futur')) && (op.sellInstrument?.toLowerCase().includes('futur'));
         const isSpotSpot = (op.buyInstrument?.toLowerCase().includes('spot')) && (op.sellInstrument?.toLowerCase().includes('spot'));

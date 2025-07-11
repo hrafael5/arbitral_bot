@@ -1,6 +1,6 @@
 // --- 1. DEPENDÊNCIAS ---
 const express = require('express');
-const http = require('http' );
+const http = require('http');
 const cors = require('cors');
 const ini = require('ini');
 const fs = require('fs');
@@ -21,13 +21,13 @@ const OpportunitySignaler = require('./lib/OpportunitySignaler');
 
 // --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES (TUDO MOVIDO PARA O TOPO) ---
 
-const broadcastToClients = (wssInstance, data) => { 
+const broadcastToClients = (wssInstance, data) => {
     if (!wssInstance || !wssInstance.clients) return;
-    wssInstance.clients.forEach(c => { 
+    wssInstance.clients.forEach(c => {
         if (c.readyState === WebSocket.OPEN && c.userId) {
             c.send(JSON.stringify(data));
         }
-    }); 
+    });
 };
 
 function createLoggerWithWSS(wssInstance, currentConfig) {
@@ -72,16 +72,12 @@ async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
 }
 
 
-// --- 3. CONFIGURAÇÃO PRINCIPAL E EXECUÇÃO ---
+// --- 3. CONFIGURAÇÃO PRINCIPAL E INICIALIZAÇÃO ---
 
-// Carregar config do .ini
 const config = ini.parse(fs.readFileSync(path.resolve(__dirname, "conf.ini"), "utf-8"));
-
-// Inicializar Express e Servidor HTTP
 const app = express();
-const server = http.createServer(app );
+const server = http.createServer(app);
 
-// Configurar Sessão
 const mySessionStore = new SequelizeStore({ db: sequelize });
 const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET,
@@ -94,13 +90,11 @@ const sessionMiddleware = session({
         httpOnly: true, 
         maxAge: 7 * 24 * 60 * 60 * 1000 
     }
-} );
+});
 
-// Configurar WebSocket Server
 const wss = new WebSocket.Server({ noServer: true });
 const logger = createLoggerWithWSS(wss, config);
 
-// Middlewares do Express
 app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
@@ -108,11 +102,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Associações dos Modelos
 User.hasOne(UserConfiguration);
 UserConfiguration.belongsTo(User);
 
-// Instâncias principais do Bot
 config.mexc.api_key = process.env.MY_MEXC_API_KEY;
 config.mexc.api_secret = process.env.MY_MEXC_API_SECRET;
 config.gateio.api_key = process.env.MY_GATEIO_API_KEY;
@@ -124,9 +116,8 @@ const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger)
 let marketMonitor;
 
 
-// --- 4. SETUP DE ROTAS E WEBSOCKETS ---
+// --- 4. DEFINIÇÃO DE ROTAS E LÓGICA DE EXECUÇÃO ---
 
-// Setup de Rotas HTTP
 const userRoutes = require('./routes/user.routes');
 app.use('/api/users', userRoutes);
 const isAuthenticated = (req, res, next) => {
@@ -138,8 +129,6 @@ app.get('/settings.html', isAuthenticated, (req, res) => res.sendFile(path.join(
 app.get('/api/opportunities', isAuthenticated, (req, res) => res.json(opportunitySignaler.getOpportunities()));
 app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: config.arbitrage }));
 
-
-// Setup de Conexões WebSocket
 server.on('upgrade', (request, socket, head) => {
     sessionMiddleware(request, {}, () => {
         if (!request.session.userId) {
@@ -164,9 +153,6 @@ wss.on('connection', wsClient => {
     }
     wsClient.on('close', () => logger.info(`User ${wsClient.userId} disconnected.`));
 });
-
-
-// --- 5. LÓGICA DE INICIALIZAÇÃO E ENCERRAMENTO ---
 
 async function initializeAndStartBot() {
     logger.info("Initializing bot with Centralized Scanner model...");
@@ -200,44 +186,22 @@ const shutdown = () => {
     setTimeout(() => { logger.warn("Forcing shutdown after timeout."); process.exit(1); }, 10000);
 };
 
-// --- 6. INÍCIO DA EXECUÇÃO ---
-// CORREÇÃO APLICADA AQUI
-async function startServer() {
-    try {
-        await sequelize.sync({ alter: true });
-        logger.info("Database schema synchronized.");
 
-        // Verifica se existe algum usuário. Se não, cria um usuário padrão.
-        const userCount = await User.count();
-        if (userCount === 0) {
-            logger.info("No users found in the database. Creating a default admin user...");
-            const defaultUser = await User.create({
-                name: 'Admin',
-                email: 'admin@admin.com',
-                password: 'ChangeMe123!', // Use uma senha forte
-                emailVerified: true
-            });
-            await UserConfiguration.create({ UserId: defaultUser.id });
-            logger.info("Default admin user created successfully. Please change the password.");
-        }
-
-        await mySessionStore.sync();
-        logger.info("Session store synchronized.");
-
+// --- 5. INÍCIO DA EXECUÇÃO ---
+sequelize.sync()
+    .then(() => {
+        mySessionStore.sync();
+        logger.info("Database and session store synchronized.");
         const PORT = process.env.PORT || 3000;
         server.listen(PORT, () => {
             logger.info(`Server listening on port ${PORT}.`);
             initializeAndStartBot();
         });
-
-    } catch (err) {
-        logger.error(`[CRITICAL] Could not start the server: ${err.message}`);
-        console.error(err); // Log completo do erro para depuração
+    })
+    .catch(err => {
+        logger.error(`[CRITICAL] Could not connect/sync to the database: ${err.message}`);
         process.exit(1);
-    }
-}
-
-startServer(); // Inicia a função assíncrona
+    });
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
