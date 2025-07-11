@@ -354,7 +354,7 @@
             console.log(`[CalcPopUpNew] Carregada. Par: ${pair}, DirOrig: ${originalDirection}, BuyEx: ${entryBuyExName} (Spot: ${entryBuyInstrumentIsSpot}), SellEx: ${entrySellExName} (Spot: ${entrySellInstrumentIsSpot})`);
 
             updatePopupDisplay(); 
-            window.profitUpdateInterval = setInterval(updatePopupDisplay, 1); 
+            window.profitUpdateInterval = setInterval(updatePopupDisplay, 1000); 
             
             if (openChartButtonEl) {
                 openChartButtonEl.addEventListener('click', () => {

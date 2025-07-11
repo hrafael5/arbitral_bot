@@ -57,7 +57,6 @@ window.frontendState = state;
 
 const FAVORITES_STORAGE_KEY = 'arbitrageDashboard_favoritedOps_v1';
 const BLOCKED_STORAGE_KEY = 'arbitrageDashboard_blockedOps_v2'; 
-// const WATCHED_PAIRS_STORAGE_KEY = 'arbitrageDashboard_watchedPairs_v2'; // Não é mais necessário
 const THEME_STORAGE_KEY = 'arbitrageDashboard_theme_v1'; 
 
 // Ícones SVG para expandir/recolher
@@ -198,12 +197,9 @@ function abrirJanelaDeGrafico(url, windowName, position) {
     if (newWindow) newWindow.focus();
 }
 
-// --- INÍCIO DA ALTERAÇÃO ---
 function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false) {
     const url = `realtime_profit_calc.html?pair=${encodeURIComponent(pair)}&direction=${encodeURIComponent(direction)}&buyEx=${encodeURIComponent(buyEx)}&sellEx=${encodeURIComponent(sellEx)}`;
     
-    // Se forceNewWindow for true, usa '_blank' que sempre abre uma nova janela.
-    // Caso contrário, usa um nome fixo para reutilizar e substituir a mesma janela.
     const windowName = forceNewWindow ? '_blank' : 'arbitrage_calculator_window';
 
     const popWidth = 420;
@@ -218,41 +214,48 @@ function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false
         calcWindow.focus();
     }
 }
-// --- FIM DA ALTERAÇÃO ---
 
+// --- INÍCIO DA ALTERAÇÃO ---
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
-    let opDataToUse = null;
-    if (typeof opDataForCopyStr === 'string' && opDataForCopyStr) {
-        try {
-            opDataToUse = JSON.parse(opDataForCopyStr.replace(/&quot;/g, '"'));
-        } catch (e) {
-            console.error("FRONTEND: Falha ao parsear opDataForCopyStr em abrirGraficosComLayout", e);
-        }
-    }
+    // Ação 1: Abrir a calculadora imediatamente, com os parâmetros CORRETOS.
+    abrirCalculadora(pair, direction, buyExchange, sellExchange);
 
-    if (opDataToUse && opDataToUse.buyPrice && state.defaultCapitalUSD > 0) {
-        const buyPrice = parseFloat(opDataToUse.buyPrice);
-        if (buyPrice > 0) {
-            const qtdOriginal = state.defaultCapitalUSD / buyPrice;
-            const qtdSugerida = arredondarQuantidadeSugerida(qtdOriginal);
-            if (qtdSugerida > 0) {
-                copiarParaClipboard(qtdSugerida);
+    // Ação 2: Agendar as tarefas pesadas para serem executadas logo depois.
+    setTimeout(() => {
+        // Lógica para copiar a quantidade para o clipboard
+        let opDataToUse = null;
+        if (typeof opDataForCopyStr === 'string' && opDataForCopyStr) {
+            try {
+                opDataToUse = JSON.parse(opDataForCopyStr.replace(/&quot;/g, '"'));
+            } catch (e) {
+                console.error("FRONTEND: Falha ao parsear opDataForCopyStr", e);
             }
         }
-    }
 
-    let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
-    let urlLeg2 = getExchangeUrl(sellExchange, sellInstrument, pair);
-    
-    if (urlLeg1 === urlLeg2) {
-        window.open(urlLeg1, '_blank');
-    } else {
-        abrirJanelaDeGrafico(urlLeg1, 'arbitrage_leg1_window', 'left');
-        abrirJanelaDeGrafico(urlLeg2, 'arbitrage_leg2_window', 'right');
-    }
-    // Chama a calculadora com o comportamento padrão (reutilizar janela)
-    abrirCalculadora(pair, direction, buyExchange, sellExchange);
+        if (opDataToUse && opDataToUse.buyPrice && state.defaultCapitalUSD > 0) {
+            const buyPrice = parseFloat(opDataToUse.buyPrice);
+            if (buyPrice > 0) {
+                const qtdOriginal = state.defaultCapitalUSD / buyPrice;
+                const qtdSugerida = arredondarQuantidadeSugerida(qtdOriginal);
+                if (qtdSugerida > 0) {
+                    copiarParaClipboard(qtdSugerida);
+                }
+            }
+        }
+
+        // Lógica para abrir as janelas dos gráficos
+        let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
+        let urlLeg2 = getExchangeUrl(sellExchange, sellInstrument, pair);
+        
+        if (urlLeg1 === urlLeg2) {
+            window.open(urlLeg1, '_blank');
+        } else {
+            abrirJanelaDeGrafico(urlLeg1, 'arbitrage_leg1_window', 'left');
+            abrirJanelaDeGrafico(urlLeg2, 'arbitrage_leg2_window', 'right');
+        }
+    }, 0); // O delay de 0ms é a chave para a responsividade.
 }
+// --- FIM DA ALTERAÇÃO ---
 
 function toggleSidebar() {
   state.sidebarCollapsed = !state.sidebarCollapsed;
@@ -880,7 +883,6 @@ function renderWatchedPairsTable() {
     });
 }
 
-
 function renderOpportunitiesTable() {
     if (!opportunitiesTableBodyEl || !elements.viewTitle) return;
 
@@ -940,6 +942,7 @@ function renderOpportunitiesTable() {
     let tableHtml = "";
     
     finalOpportunitiesToRender.forEach((opWrapper) => {
+      try { 
         const op = opWrapper.data;
         const { firstSeen } = opWrapper;
         const opKey = `${op.pair}-${op.direction}`;
@@ -1006,10 +1009,7 @@ function renderOpportunitiesTable() {
         const compraLink = `<a href="#" class="exchange-link" onclick="window.open(getExchangeUrl('${escapedBuyEx}', '${escapedBuyInst}', '${escapedPair}'), '_blank'); return false;">${getExchangeTag(op.buyExchange)} ${op.buyInstrument}<span>${formatPrice(op.buyPrice)}</span></a>`;
         const vendaLink = `<a href="#" class="exchange-link" onclick="window.open(getExchangeUrl('${escapedSellEx}', '${escapedSellInst}', '${escapedPair}'), '_blank'); return false;">${getExchangeTag(op.sellExchange)} ${op.sellInstrument}<span>${formatPrice(op.sellPrice)}</span></a>`;
         
-        // --- INÍCIO DA ALTERAÇÃO ---
-        // Adiciona o parâmetro 'true' para forçar uma nova janela de calculadora a partir deste ícone.
         const calculatorIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="calculator-icon" onclick="abrirCalculadora('${escapedPair}', '${escapedDirection}', '${escapedBuyEx}', '${escapedSellEx}', true)" title="Abrir Calculadora Detalhada em nova janela"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="16" y1="10" x2="16" y2="10"></line><line x1="12" y1="10" x2="12" y2="10"></line><line x1="8" y1="10" x2="8" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="8" y1="14" x2="8" y2="18"></line></svg>`;
-        // --- FIM DA ALTERAÇÃO ---
 
         tableHtml += `<tr>
       <td class="pair-cell">
@@ -1031,6 +1031,10 @@ function renderOpportunitiesTable() {
         ${calculatorIcon}
       </td>
     </tr>`;
+      } catch (error) {
+          console.error("Erro ao renderizar uma linha da tabela:", error);
+          console.error("Dados da oportunidade que causou o erro:", opWrapper?.data);
+      }
     });
 
     opportunitiesTableBodyEl.innerHTML = tableHtml;
