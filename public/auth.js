@@ -4,8 +4,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const registerForm = document.getElementById('register-form');
     if (registerForm) {
         const registerButton = document.getElementById('register-button');
-        const buttonText = registerButton.querySelector('.button-text');
-        const spinner = registerButton.querySelector('.loading-spinner');
         const formErrorMessage = document.getElementById('form-error-message');
 
         const fields = {
@@ -37,12 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 formErrorMessage.classList.remove('success', 'error');
             }
             for (const key in fields) {
-                if (fields[key].input) {
-                    fields[key].input.classList.remove('is-invalid');
-                }
-                if (fields[key].error) {
-                    fields[key].error.textContent = '';
-                }
+                if (fields[key].input) fields[key].input.classList.remove('is-invalid');
+                if (fields[key].error) fields[key].error.textContent = '';
             }
         }
 
@@ -100,10 +94,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
 
                 if (response.ok) {
-                    displayError(null, 'Conta criada com sucesso! Redirecionando...', true);
+                    displayError(null, 'Conta criada com sucesso! Redirecionando para o login...', true);
                     setTimeout(() => {
-                        window.location.href = '/dashboard.html'; // Redireciona para o dashboard
-                    }, 1500);
+                        // --- CORREÇÃO APLICADA AQUI ---
+                        window.location.href = '/login.html'; // Redireciona para a página de LOGIN
+                    }, 2000); // Aumentei o tempo para o usuário ler a mensagem
                 } else {
                     const errorMessage = data.message || 'Ocorreu um erro no cadastro.';
                     if (errorMessage.toLowerCase().includes('email')) {
@@ -201,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     displayError(null, 'Login realizado com sucesso! Redirecionando...', true);
                     setTimeout(() => {
                         // --- CORREÇÃO APLICADA AQUI ---
-                        window.location.href = '/dashboard.html';
+                        window.location.href = '/'; // Redireciona para a raiz (dashboard)
                     }, 1000);
                 } else {
                     displayError(null, data.message || 'E-mail ou senha inválidos.');
