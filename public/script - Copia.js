@@ -215,10 +215,14 @@ function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false
     }
 }
 
+// --- INÍCIO DA ALTERAÇÃO ---
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
+    // Ação 1: Abrir a calculadora imediatamente, com os parâmetros CORRETOS.
     abrirCalculadora(pair, direction, buyExchange, sellExchange);
 
+    // Ação 2: Agendar as tarefas pesadas para serem executadas logo depois.
     setTimeout(() => {
+        // Lógica para copiar a quantidade para o clipboard
         let opDataToUse = null;
         if (typeof opDataForCopyStr === 'string' && opDataForCopyStr) {
             try {
@@ -239,6 +243,7 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
             }
         }
 
+        // Lógica para abrir as janelas dos gráficos
         let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
         let urlLeg2 = getExchangeUrl(sellExchange, sellInstrument, pair);
         
@@ -248,8 +253,9 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
             abrirJanelaDeGrafico(urlLeg1, 'arbitrage_leg1_window', 'left');
             abrirJanelaDeGrafico(urlLeg2, 'arbitrage_leg2_window', 'right');
         }
-    }, 0); 
+    }, 0); // O delay de 0ms é a chave para a responsividade.
 }
+// --- FIM DA ALTERAÇÃO ---
 
 function toggleSidebar() {
   state.sidebarCollapsed = !state.sidebarCollapsed;
@@ -319,16 +325,13 @@ function getFilteredOpportunities() {
             if (!(op.netSpreadPercentage > 0 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay)) {
                 return false;
             }
-        // --- INÍCIO DA CORREÇÃO ---
-        // A lógica para a visualização 'saida-op' foi ajustada aqui
         } else if (state.currentView === 'saida-op') {
             const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-            // Esta condição garante que apenas oportunidades com Lucro S estritamente positivo
-            // e que atendam ao filtro do utilizador sejam mostradas.
+            // MODIFICAÇÃO: Exige que 'lucroS' seja positivo e ignora 'lucroE'.
+            // O filtro de 'minProfitSFilterDisplay' continua a ser aplicado.
             if (lucroS === null || lucroS <= 0 || lucroS < state.filters.minProfitSFilterDisplay) {
                 return false;
             }
-        // --- FIM DA CORREÇÃO ---
         } else if (state.currentView === 'ambos-positivos') {
             const lucroS = calculateLucroS(op, state.allPairsData, state.config);
             if (!(op.netSpreadPercentage > 0 && lucroS > 0)) {
