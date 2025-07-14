@@ -51,7 +51,7 @@ class WebSocketOpportunitySignaler extends OpportunitySignaler {
         super.signal(opportunity);
         const existingIndex = this.opportunities.findIndex(op => op.pair === opportunity.pair && op.direction === opportunity.direction);
         if (existingIndex > -1) this.opportunities.splice(existingIndex, 1);
-        this.opportunities.unshift(opportunity); 
+        this.opportunities.unshift(opportunity);
         if (this.opportunities.length > this.maxOpportunities) this.opportunities.pop();
         broadcastToClients(this.wss, { type: 'opportunity', data: opportunity });
     }
@@ -84,11 +84,11 @@ const sessionMiddleware = session({
     store: mySessionStore,
     resave: false,
     saveUninitialized: false,
-    proxy: true, 
-    cookie: { 
-        secure: process.env.NODE_ENV === 'production', 
-        httpOnly: true, 
-        maxAge: 7 * 24 * 60 * 60 * 1000 
+    proxy: true,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 7 * 24 * 60 * 60 * 1000
     }
 });
 
@@ -122,11 +122,18 @@ const userRoutes = require('./routes/user.routes');
 app.use('/api/users', userRoutes);
 
 // --- INÍCIO DA CORREÇÃO ---
-// Adicionadas as rotas para atualizar a configuração de arbitragem em tempo real
+// Middleware de autenticação que será usado para proteger as rotas
+const isAuthenticated = (req, res, next) => {
+    if (req.session && req.session.userId) {
+        // Se o utilizador estiver logado, continua para a rota
+        return next();
+    }
+    // Se não, retorna um erro 401 (Não Autorizado)
+    res.status(401).json({ message: "Acesso não autorizado. Por favor, faça login para continuar." });
+};
 
-// Rota para a estratégia Futuros vs Futuros
-app.post('/api/config/arbitrage', (req, res) => {
-    // Middleware de autenticação implícito, pois o frontend não envia a não ser que esteja logado
+// Rota para a estratégia Futuros vs Futuros, AGORA PROTEGIDA
+app.post('/api/config/arbitrage', isAuthenticated, (req, res) => {
     const { enableFuturesVsFutures } = req.body;
     if (typeof enableFuturesVsFutures === 'boolean') {
         config.arbitrage.enable_futures_vs_futures = enableFuturesVsFutures;
@@ -137,8 +144,8 @@ app.post('/api/config/arbitrage', (req, res) => {
     }
 });
 
-// Rota para a estratégia Spot vs Spot
-app.post('/api/config/arbitrage/spot', (req, res) => {
+// Rota para a estratégia Spot vs Spot, AGORA PROTEGIDA
+app.post('/api/config/arbitrage/spot', isAuthenticated, (req, res) => {
     const { enableSpotVsSpot } = req.body;
     if (typeof enableSpotVsSpot === 'boolean') {
         config.arbitrage.enable_spot_vs_spot = enableSpotVsSpot;
@@ -150,14 +157,13 @@ app.post('/api/config/arbitrage/spot', (req, res) => {
 });
 // --- FIM DA CORREÇÃO ---
 
-const isAuthenticated = (req, res, next) => {
-    if (req.session && req.session.userId) return next();
-    res.redirect('/login.html');
-};
+
+// Rotas para servir as páginas e dados da aplicação (já protegidas)
 app.get('/', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/settings.html', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
 app.get('/api/opportunities', isAuthenticated, (req, res) => res.json(opportunitySignaler.getOpportunities()));
-app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: config.arbitrage }));
+app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: config.arbitrage, exchanges: config.exchanges }));
+
 
 server.on('upgrade', (request, socket, head) => {
     sessionMiddleware(request, {}, () => {
@@ -178,7 +184,7 @@ wss.on('connection', wsClient => {
     try {
         wsClient.send(JSON.stringify({ type: 'opportunities', data: opportunitySignaler.getOpportunities() }));
         if (marketMonitor) wsClient.send(JSON.stringify({ type: 'all_pairs_update', data: marketMonitor.getAllMarketData() }));
-    } catch(e) {
+    } catch (e) {
         logger.error(`Error sending initial data to user ${wsClient.userId}: ${e.message}`);
     }
     wsClient.on('close', () => logger.info(`User ${wsClient.userId} disconnected.`));

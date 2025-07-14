@@ -331,6 +331,36 @@
                 if (popupProfitEEl) popupProfitEEl.textContent = "Erro";
             }
         }
+        
+        // --- INÍCIO DA ALTERAÇÃO ---
+
+        // 1. Adicionamos uma função para obter a URL do gráfico, para evitar repetição
+        function getExchangeUrl(exchange, isSpot, pairForURL) {
+            const exchangeLower = (exchange || '').toLowerCase();
+            if (exchangeLower === 'mexc') {
+                return isSpot ? `https://www.mexc.com/exchange/${pairForURL}?type=spot` : `https://futures.mexc.com/exchange/${pairForURL}`;
+            } else if (exchangeLower === 'gateio' || exchangeLower === 'gate.io') {
+                return isSpot ? `https://www.gate.io/trade/${pairForURL}` : `https://www.gate.io/futures_trade/USDT/${pairForURL}`;
+            }
+            return null;
+        }
+
+        // 2. Adicionamos a função que cria as janelas popup com tamanho e posição
+        function abrirJanelaDeGrafico(url, windowName, position) {
+            if (!url) return;
+            const screenWidth = window.screen.availWidth;
+            const screenHeight = window.screen.availHeight;
+            const windowWidth = Math.floor(screenWidth / 2) - 10;
+            const windowHeight = screenHeight - 50;
+            let left = (position === 'left') ? 0 : screenWidth - windowWidth;
+            const features = `width=${windowWidth},height=${windowHeight},left=${left},top=0,resizable=yes,scrollbars=yes`;
+            
+            // Abre a janela com as características definidas
+            const newWindow = window.open(url, windowName, features);
+            if (newWindow) newWindow.focus();
+        }
+
+        // --- FIM DA ALTERAÇÃO ---
 
         window.onload = () => {
             const params = new URLSearchParams(window.location.search);
@@ -357,39 +387,27 @@
             window.profitUpdateInterval = setInterval(updatePopupDisplay, 1000); 
             
             if (openChartButtonEl) {
+                // --- INÍCIO DA ALTERAÇÃO ---
+                // 3. Modificamos o evento de clique para usar a nova lógica
                 openChartButtonEl.addEventListener('click', () => {
                     if (!pair) { alert("Par não definido."); return; }
                     const pairForURL = pair.replace('/', '_').toUpperCase();
-                    const urlsToOpen = new Set(); 
 
-                    let chartUrlLeg1 = "";
-                    const buyExLower = entryBuyExName.toLowerCase();
-                    if (buyExLower === 'mexc') {
-                        chartUrlLeg1 = entryBuyInstrumentIsSpot ? `https://www.mexc.com/exchange/${pairForURL}?type=spot` : `https://futures.mexc.com/exchange/${pairForURL}`;
-                    } else if (buyExLower === 'gateio' || buyExLower === 'gate.io') {
-                        chartUrlLeg1 = entryBuyInstrumentIsSpot ? `https://www.gate.io/trade/${pairForURL}` : `https://www.gate.io/futures_trade/USDT/${pairForURL}`;
-                    }
-                    if(chartUrlLeg1) urlsToOpen.add(chartUrlLeg1);
+                    // Obter as URLs para cada perna da operação
+                    const urlLeg1 = getExchangeUrl(entryBuyExName, entryBuyInstrumentIsSpot, pairForURL);
+                    const urlLeg2 = getExchangeUrl(entrySellExName, entrySellInstrumentIsSpot, pairForURL);
 
-                    let chartUrlLeg2 = "";
-                    const sellExLower = entrySellExName.toLowerCase();
-                    if (sellExLower === 'mexc') {
-                        chartUrlLeg2 = entrySellInstrumentIsSpot ? `https://www.mexc.com/exchange/${pairForURL}?type=spot` : `https://futures.mexc.com/exchange/${pairForURL}`;
-                    } else if (sellExLower === 'gateio' || sellExLower === 'gate.io') {
-                        chartUrlLeg2 = entrySellInstrumentIsSpot ? `https://www.gate.io/trade/${pairForURL}` : `https://www.gate.io/futures_trade/USDT/${pairForURL}`;
+                    // Se as URLs forem iguais, abre só uma janela nova (caso de Spot vs Futuros na mesma corretora)
+                    if (urlLeg1 === urlLeg2) {
+                         if(urlLeg1) window.open(urlLeg1, '_blank');
+                    } else {
+                        // Se forem diferentes, usa a função para abrir popups posicionados e nomeados
+                        // Os nomes 'arbitrage_leg1_window' e 'arbitrage_leg2_window' garantem que as janelas sejam substituídas
+                        abrirJanelaDeGrafico(urlLeg1, 'arbitrage_leg1_window', 'left');
+                        abrirJanelaDeGrafico(urlLeg2, 'arbitrage_leg2_window', 'right');
                     }
-                     if(chartUrlLeg2) urlsToOpen.add(chartUrlLeg2);
-
-                    if (urlsToOpen.size === 0) {
-                        alert(`Gráficos para ${entryBuyExName} ou ${entrySellExName} não suportados.`);
-                        return;
-                    }
-                    
-                    urlsToOpen.forEach(url => {
-                        console.log(`[CalcPopUpNew] Abrindo gráfico em nova janela/aba: ${url}`);
-                        window.open(url, '_blank'); 
-                    });
                 });
+                // --- FIM DA ALTERAÇÃO ---
             }
         };
         window.onunload = () => { if (window.profitUpdateInterval) clearInterval(window.profitUpdateInterval); };
