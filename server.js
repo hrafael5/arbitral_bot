@@ -120,6 +120,36 @@ let marketMonitor;
 
 const userRoutes = require('./routes/user.routes');
 app.use('/api/users', userRoutes);
+
+// --- INÍCIO DA CORREÇÃO ---
+// Adicionadas as rotas para atualizar a configuração de arbitragem em tempo real
+
+// Rota para a estratégia Futuros vs Futuros
+app.post('/api/config/arbitrage', (req, res) => {
+    // Middleware de autenticação implícito, pois o frontend não envia a não ser que esteja logado
+    const { enableFuturesVsFutures } = req.body;
+    if (typeof enableFuturesVsFutures === 'boolean') {
+        config.arbitrage.enable_futures_vs_futures = enableFuturesVsFutures;
+        logger.info(`Strategy 'Futures vs Futures' was ${enableFuturesVsFutures ? 'ATIVADA' : 'DESATIVADA'} pelo utilizador ${req.session.userId}.`);
+        res.status(200).json({ success: true, message: 'Configuração de Futuros vs Futuros atualizada.' });
+    } else {
+        res.status(400).json({ success: false, message: 'Valor inválido fornecido.' });
+    }
+});
+
+// Rota para a estratégia Spot vs Spot
+app.post('/api/config/arbitrage/spot', (req, res) => {
+    const { enableSpotVsSpot } = req.body;
+    if (typeof enableSpotVsSpot === 'boolean') {
+        config.arbitrage.enable_spot_vs_spot = enableSpotVsSpot;
+        logger.info(`Strategy 'Spot vs Spot' was ${enableSpotVsSpot ? 'ATIVADA' : 'DESATIVADA'} pelo utilizador ${req.session.userId}.`);
+        res.status(200).json({ success: true, message: 'Configuração de Spot vs Spot atualizada.' });
+    } else {
+        res.status(400).json({ success: false, message: 'Valor inválido fornecido.' });
+    }
+});
+// --- FIM DA CORREÇÃO ---
+
 const isAuthenticated = (req, res, next) => {
     if (req.session && req.session.userId) return next();
     res.redirect('/login.html');
