@@ -327,6 +327,8 @@ function getFilteredOpportunities() {
             }
         } else if (state.currentView === 'saida-op') {
             const lucroS = calculateLucroS(op, state.allPairsData, state.config);
+            // MODIFICAÇÃO: Exige que 'lucroS' seja positivo e ignora 'lucroE'.
+            // O filtro de 'minProfitSFilterDisplay' continua a ser aplicado.
             if (lucroS === null || lucroS <= 0 || lucroS < state.filters.minProfitSFilterDisplay) {
                 return false;
             }
