@@ -1,3 +1,6 @@
+// A linha abaixo deve ser a PRIMEIRA LINHA do seu ficheiro
+require('dotenv').config();
+
 // --- 1. DEPENDÊNCIAS ---
 const express = require('express');
 const http = require('http');
@@ -11,7 +14,6 @@ const session = require('express-session');
 const sequelize = require('./database');
 const User = require('./models/user.model');
 const UserConfiguration = require('./models/userConfiguration.model');
-require('dotenv').config();
 const SequelizeStore = require("connect-session-sequelize")(session.Store);
 
 const MEXCConnector = require('./lib/MEXCConnector');
@@ -20,16 +22,14 @@ const MarketMonitor = require('./lib/MarketMonitor');
 const ArbitrageEngine = require('./lib/ArbitrageEngine');
 const OpportunitySignaler = require('./lib/OpportunitySignaler');
 
-// --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES (TUDO MOVIDO PARA O TOPO) ---
+// --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES ---
 
 const broadcastToClients = (wssInstance, data) => {
     if (!wssInstance || !wssInstance.clients) return;
     wssInstance.clients.forEach(c => {
         if (c.readyState === WebSocket.OPEN && c.userId) {
-            // Se o tipo de dado for 'opportunity' e o usuário for 'free', filtrar oportunidades com lucro >= 1%
-            // Esta filtragem garante que usuários free não recebam oportunidades de alto lucro do servidor.
             if (data.type === 'opportunity' && c.subscriptionStatus === 'free' && data.data.netSpreadPercentage >= 1.0) {
-                return; // Não envia a oportunidade para usuários free se o lucro for >= 1%
+                return;
             }
             c.send(JSON.stringify(data));
         }
@@ -68,10 +68,8 @@ async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
     if (!connector) return [];
     try {
         logger.info(`[${exchangeName}] Starting to fetch futures contract details...`);
-        
-        // Implementa timeout e retry
         const maxRetries = 3;
-        const timeout = 15000; // 15 segundos
+        const timeout = 15000;
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
@@ -103,11 +101,9 @@ async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
                     logger.error(`[${exchangeName}] All attempts failed. Using empty pairs list.`);
                     return [];
                 }
-                // Aguarda antes de tentar novamente
                 await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
             }
         }
-        
         return [];
     } catch (error) {
         logger.error(`[fetchAndFilterPairs] Error for ${exchangeName}: ${error.message}`);
@@ -142,14 +138,8 @@ const logger = createLoggerWithWSS(wss, config);
 app.set('trust proxy', 1);
 app.use(cors());
 app.use(compression());
-
-// O Webhook do Stripe precisa do "body" original, então o express.json()
-// não pode processá-lo. Vamos mover o express.json() para depois da rota do webhook.
-// app.use(express.json()); // MOVIDO PARA BAIXO
-
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
-app.use(express.static(path.join(__dirname, 'public')));
 
 User.hasOne(UserConfiguration);
 UserConfiguration.belongsTo(User);
@@ -167,20 +157,19 @@ let marketMonitor;
 
 // --- 4. DEFINIÇÃO DE ROTAS E LÓGICA DE EXECUÇÃO ---
 
-// --- INÍCIO DA ALTERAÇÃO ---
-// Adicionamos as rotas de pagamento aqui.
-// É importante que a rota do webhook venha ANTES do express.json()
+// A rota do webhook do Stripe precisa vir ANTES do express.json()
 const paymentRoutes = require('./routes/payment.routes');
 app.use('/api/payments', paymentRoutes);
 
-// Agora podemos usar o express.json() para todas as outras rotas
-app.use(express.json()); 
-// --- FIM DA ALTERAÇÃO ---
+// Agora usamos o express.json() para as outras rotas
+app.use(express.json());
+
+// Servir os ficheiros estáticos da pasta 'public'
+app.use(express.static(path.join(__dirname, 'public')));
 
 const userRoutes = require('./routes/user.routes');
 app.use('/api/users', userRoutes);
 
-// Middleware de autenticação que será usado para proteger as rotas
 const isAuthenticated = (req, res, next) => {
     if (req.session && req.session.userId) {
         return next();
@@ -188,7 +177,6 @@ const isAuthenticated = (req, res, next) => {
     res.status(401).json({ message: "Acesso não autorizado. Por favor, faça login para continuar." });
 };
 
-// Rotas para a estratégia Futuros vs Futuros e Spot vs Spot, AGORA PROTEGIDAS
 app.post('/api/config/arbitrage', isAuthenticated, (req, res) => {
     const { enableFuturesVsFutures } = req.body;
     if (typeof enableFuturesVsFutures === 'boolean') {
@@ -211,7 +199,6 @@ app.post('/api/config/arbitrage/spot', isAuthenticated, (req, res) => {
     }
 });
 
-// Rotas para servir as páginas e dados da aplicação (já protegidas)
 app.get('/', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/settings.html', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
 app.get('/api/opportunities', isAuthenticated, (req, res) => res.json(opportunitySignaler.getOpportunities()));
@@ -237,17 +224,16 @@ wss.on("connection", async (wsClient) => {
     try {
         const user = await User.findByPk(wsClient.userId);
         if (user) {
-            wsClient.subscriptionStatus = user.subscriptionStatus; // Anexa o status da assinatura ao objeto wsClient
+            wsClient.subscriptionStatus = user.subscriptionStatus;
             logger.info(`User ${wsClient.userId} subscription status: ${wsClient.subscriptionStatus}`);
         } else {
             logger.warn(`User ${wsClient.userId} not found in database.`);
-            wsClient.subscriptionStatus = 'free'; // Default para free se não encontrar
+            wsClient.subscriptionStatus = 'free';
         }
 
-        // Envia oportunidades iniciais, filtrando para usuários free
         const initialOpportunities = opportunitySignaler.getOpportunities().filter(op => {
             if (wsClient.subscriptionStatus === 'free' && op.netSpreadPercentage >= 1.0) {
-                return false; // Não envia oportunidades >= 1% para usuários free
+                return false;
             }
             return true;
         });
@@ -263,20 +249,15 @@ wss.on("connection", async (wsClient) => {
 async function initializeAndStartBot() {
     logger.info("Initializing bot with Centralized Scanner model...");
     try {
-        // Cache básico de pares para fallback
         const fallbackPairs = {
-            mexc: ["BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT", "MATIC/USDT", "DOT/USDT", "AVAX/USDT"],
-            gateio: ["BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT", "MATIC/USDT", "DOT/USDT", "AVAX/USDT"]
+            mexc: ["BTC/USDT", "ETH/USDT"],
+            gateio: ["BTC/USDT", "ETH/USDT"]
         };
-
-        logger.info("Fetching pairs from exchanges in parallel...");
         const startTime = Date.now();
-        
         const [mexcPairs, gateioPairs] = await Promise.all([
             fetchAndFilterPairs(connectors.mexc, "MEXC", config.mexc),
             fetchAndFilterPairs(connectors.gateio, "GateIO", config.gateio)
         ]);
-
         const fetchTime = Date.now() - startTime;
         logger.info(`Pairs fetching completed in ${fetchTime}ms`);
 
@@ -285,13 +266,8 @@ async function initializeAndStartBot() {
             gateio: gateioPairs.length > 0 ? gateioPairs : fallbackPairs.gateio
         };
 
-        // Log se estamos usando fallback
-        if (mexcPairs.length === 0) {
-            logger.warn("Using fallback pairs for MEXC due to fetch failure");
-        }
-        if (gateioPairs.length === 0) {
-            logger.warn("Using fallback pairs for Gate.io due to fetch failure");
-        }
+        if (mexcPairs.length === 0) logger.warn("Using fallback pairs for MEXC due to fetch failure");
+        if (gateioPairs.length === 0) logger.warn("Using fallback pairs for Gate.io due to fetch failure");
 
         logger.info(`Starting market monitor with ${pairsByExchange.mexc.length} MEXC pairs and ${pairsByExchange.gateio.length} Gate.io pairs`);
 
