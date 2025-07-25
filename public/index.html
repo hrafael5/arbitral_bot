@@ -13,6 +13,17 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="upgrade-message"></div>
+  
+  <div id="test-version-banner" class="test-version-banner" style="display: none;">
+    <div class="banner-content">
+      <span class="banner-icon">⚠️</span>
+      <span class="banner-text">Você está usando a versão de teste do ArbFlash</span>
+      <button class="banner-upgrade-button">Adquirir Versão Premium</button>
+      <button class="banner-close">×</button>
+    </div>
+  </div>
+
   <div class="app-container">
     <div class="sidebar" id="sidebar">
       <div class="sidebar-header">
@@ -32,7 +43,7 @@
           <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none">
             <path d="M7 17l9.2-9.2M17 17V7H7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <span class="nav-item-text">Arbitragens</span>
+          <span class="nav-item-text">Entrada OP</span>
         </button>
 
         <button class="nav-item" id="nav-saida-op" data-view="saida-op">
@@ -111,11 +122,24 @@
         <div class="config-container">
           <div class="config-group">
             <label for="default-capital-input">Capital Padrão (USD):</label>
-            <input type="number" id="default-capital-input" placeholder="Ex: 100" min="0">
+            <input type="number" id="default-capital-input" placeholder="Ex: 100" min="1" step="1">
           </div>
           <div class="config-group">
-            <label for="sound-profit-threshold-input">Lucro Som (%):</label>
-            <input type="number" id="sound-profit-threshold-input" value="0" min="0" step="0.1">
+            <label for="lucro-som-input">Lucro Som (%):</label>
+            <input type="number" id="sound-profit-threshold-input" value="0" min="0" step="0.01">
+          </div>
+          <div class="config-group" id="filter-group-lucro-e">
+            <label for="filter-min-profit-e-display">Entrada (%):</label>
+            <select id="filter-min-profit-e-display">
+              <option value="0">Todos > 0</option>
+              <option value="0.20">>= 0.20%</option>
+              <option value="0.50">>= 0.50%</option>
+              <option value="1.0">>= 1.0%</option>
+              <option value="1.5">>= 1.5%</option>
+              <option value="2.0">>= 2.0%</option>
+              <option value="3.0">>= 3.0%</option>
+              <option value="5.0">>= 5.0%</option>
+            </select>
           </div>
         </div>
       </div>
@@ -164,23 +188,11 @@
             <span style="margin: 0 2px;">-</span>
             <input type="number" id="filter-funding-max" placeholder="Máx" step="0.001">
           </div>
-          
-          <div class="filter-group" id="filter-group-lucro-e">
-            <label for="filter-min-profit-e-display">Lucro E (%):</label>
-            <select id="filter-min-profit-e-display">
-              <option value="0">Todos > 0</option>
-              <option value="0.20">>= 0.20%</option>
-              <option value="0.50">>= 0.50%</option>
-              <option value="1.0">>= 1.0%</option>
-              <option value="1.5">>= 1.5%</option>
-              <option value="2.0">>= 2.0%</option>
-              <option value="3.0">>= 3.0%</option>
-              <option value="5.0">>= 5.0%</option>
-            </select>
-          </div>
+        </div>
 
+        <div class="filters-row">
           <div class="filter-group" id="filter-group-lucro-s" style="display: none;">
-            <label for="filter-min-profit-s-display">Lucro S (%):</label>
+            <label for="filter-min-profit-s-display">Saída (%):</label>
             <select id="filter-min-profit-s-display">
               <option value="0">Todos > 0</option>
               <option value="0.20">>= 0.20%</option>
@@ -215,11 +227,11 @@
                 <th>PAR</th>
                 <th>COMPRA</th>
                 <th>VENDA</th>
-                <th>LUCRO E. (%)</th>
-                <th>LUCRO S. (%)</th>
+                <th>ENTRADA (%)</th>
+                <th>SAÍDA (%)</th>
                 <th>VOLUMES (SPOT/FUT)</th>
                 <th>FINANC. (REF)</th>
-                <th>TIME</th>
+                <th>ABERTURA</th>
               </tr>
             </thead>
             <tbody id="watched-pairs-table-body">
@@ -236,13 +248,13 @@
                 <th class="sortable" onclick="sortByColumn('pair')">PAR <span class="sort-arrow" id="sort-arrow-pair"></span></th>
                 <th>COMPRA</th>
                 <th>VENDA</th>
-                <th class="sortable" onclick="sortByColumn('netSpreadPercentage')">LUCRO E. (%) <span class="sort-arrow" id="sort-arrow-netSpreadPercentage"></span></th>
-                <th class="sortable" onclick="sortByColumn('lucroS')">LUCRO S. (%) <span class="sort-arrow" id="sort-arrow-lucroS"></span></th>
+                <th class="sortable" onclick="sortByColumn('netSpreadPercentage')">ENTRADA (%) <span class="sort-arrow" id="sort-arrow-netSpreadPercentage"></span></th>
+                <th class="sortable" onclick="sortByColumn('lucroS')">SAÍDA (%) <span class="sort-arrow" id="sort-arrow-lucroS"></span></th>
                 <th class="sortable" onclick="sortByColumn('volume')">VOLUMES (SPOT/FUT) <span class="sort-arrow" id="sort-arrow-volume"></span></th>
                 <th class="sortable" onclick="sortByColumn('fundingRate')">FINANC. (REF) <span class="sort-arrow" id="sort-arrow-fundingRate"></span></th>
                 <th>QTD. SUG. <span id="qty-sug-base-unit-header">(USD)</span></th>
-                <th class="sortable" onclick="sortByColumn('firstSeen')">TIME <span class="sort-arrow" id="sort-arrow-firstSeen"></span></th>
-                <th>AÇÕES</th>
+                <th class="sortable" onclick="sortByColumn('firstSeen')">ABERTURA <span class="sort-arrow" id="sort-arrow-firstSeen"></span></th>
+                <th>CALCULADORA</th>
               </tr>
             </thead>
             <tbody id="opportunities-table-body">
@@ -273,8 +285,8 @@
                 <th>PAR</th>
                 <th>COMPRA (Snapshot)</th>
                 <th>VENDA (Snapshot)</th>
-                <th>LUCRO E. (%) (Ao Vivo)</th>
-                <th>LUCRO S. (%) (Ao Vivo)</th>
+                <th>ENTRADA (%) (Ao Vivo)</th>
+                <th>SAÍDA (%) (Ao Vivo)</th>
                 <th>VOLUMES (Ao Vivo)</th>
                 <th>FINANC. (Ao Vivo)</th>
                 <th>AÇÕES</th>

@@ -149,10 +149,10 @@
                 <span class="value" id="popupLeg1Price">0.00000</span>
             </div>
             <div class="data-column center">
-                <span class="label">Lucro E</span>
+                <span class="label">Entrada</span>
                 <span class="value profit-value zero" id="popupProfitE">-0.00%</span>
                 <div class="sub-profit-container">
-                    <span class="label-s">Lucro S (Inverso):</span>
+                    <span class="label-s">Saída (Inverso):</span>
                     <span class="value-s profit-value zero" id="popupProfitS">-0.00%</span>
                 </div>
             </div>
@@ -226,7 +226,7 @@
             const configForS_SellLeg = mainState.config.exchanges[entryBuyExName.toLowerCase()]; 
 
             if (!configForS_BuyLeg || !configForS_SellLeg) {
-                console.warn(`[CalcPopUpS] Config de taxas não encontrada para ${entrySellExName} ou ${entryBuyExName} (para Lucro S)`);
+                console.warn(`[CalcPopUpS] Config de taxas não encontrada para ${entrySellExName} ou ${entryBuyExName} (para Saída)`);
                 return NaN;
             }
 

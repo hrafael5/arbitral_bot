@@ -1,14 +1,12 @@
 const { DataTypes } = require('sequelize');
-const sequelize = require('../database'); // Precisaremos criar este arquivo depois
+const sequelize = require('../database');
 const bcrypt = require('bcrypt');
 
 const User = sequelize.define('User', {
   name: {
     type: DataTypes.STRING,
-    // --- CORREÇÃO APLICADA AQUI ---
-    allowNull: true, // Alterado de 'false' para 'true'
-    defaultValue: 'Usuário', // Adicionado um valor padrão
-    // -----------------------------
+    allowNull: true,
+    defaultValue: 'Usuário',
     validate: {
       notEmpty: {
         msg: "O nome é obrigatório."
@@ -72,14 +70,36 @@ const User = sequelize.define('User', {
   },
   subscriptionStatus: {
     type: DataTypes.STRING,
-    defaultValue: 'inactive', // ex: inactive, active, cancelled
+    defaultValue: 'free',
     validate: {
       isIn: {
-        args: [['inactive', 'active', 'cancelled', 'trial']],
+        args: [['free', 'premium', 'active', 'canceled', 'incomplete']], // Adicionado mais status
         msg: "Status de assinatura inválido."
       }
     }
   },
+  
+  // --- CAMPOS ADICIONADOS PARA A INTEGRAÇÃO COM O STRIPE ---
+  stripeCustomerId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true
+  },
+  stripeSubscriptionId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true
+  },
+  stripePriceId: {
+      type: DataTypes.STRING,
+      allowNull: true
+  },
+  stripeCurrentPeriodEnd: {
+      type: DataTypes.DATE,
+      allowNull: true
+  },
+  // --- FIM DOS CAMPOS ADICIONADOS ---
+
   emailVerified: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
@@ -154,7 +174,6 @@ User.prototype.isLocked = function() {
 
 // Método para incrementar tentativas de login
 User.prototype.incrementLoginAttempts = async function() {
-  // Se já passou do tempo de bloqueio, resetar
   if (this.lockedUntil && this.lockedUntil < Date.now()) {
     return this.update({
       loginAttempts: 1,
@@ -164,7 +183,6 @@ User.prototype.incrementLoginAttempts = async function() {
   
   const updates = { loginAttempts: this.loginAttempts + 1 };
   
-  // Bloquear após 5 tentativas por 30 minutos
   if (this.loginAttempts + 1 >= 5 && !this.isLocked()) {
     updates.lockedUntil = Date.now() + 30 * 60 * 1000; // 30 minutos
   }

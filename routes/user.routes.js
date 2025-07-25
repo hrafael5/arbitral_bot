@@ -1,9 +1,9 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const crypto = require('crypto');
-const { Op } = require('sequelize');
-const User = require('../models/user.model');
-const UserConfiguration = require('../models/userConfiguration.model');
+const crypto = require("crypto");
+const { Op } = require("sequelize");
+const User = require("../models/user.model");
+const UserConfiguration = require("../models/userConfiguration.model");
 
 // Middleware para rate limiting (implementação simples)
 const loginAttempts = new Map();
@@ -38,20 +38,14 @@ const rateLimitMiddleware = (req, res, next) => {
 };
 
 // Função para enviar email (simulada - em produção usar serviço real)
+// Em produção, configure um serviço de e-mail como SendGrid, AWS SES, Mailgun, etc.
 const sendEmail = async (to, subject, html) => {
-  // Em produção, implementar com serviço como SendGrid, AWS SES, etc.
-  console.log(`
-    ===== EMAIL SIMULADO =====
-    Para: ${to}
-    Assunto: ${subject}
-    Conteúdo: ${html}
-    ==========================
-  `);
+  console.log(`\n    ===== EMAIL SIMULADO =====\n    Para: ${to}\n    Assunto: ${subject}\n    Conteúdo: ${html}\n    ==========================\n  `);
   return Promise.resolve(true);
 };
 
 // Rota de Cadastro (Register)
-router.post('/register', async (req, res) => {
+router.post("/register", async (req, res) => {
   try {
     const { name, email, whatsapp, password } = req.body;
     
@@ -86,10 +80,11 @@ router.post('/register', async (req, res) => {
     await newUser.save();
 
     // Enviar email de verificação (simulado)
-    const verificationLink = `${req.protocol}://${req.get('host')}/api/users/verify-email?token=${verificationToken}`;
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const verificationLink = `${baseUrl}/api/users/verify-email?token=${verificationToken}`;
     await sendEmail(
       newUser.email,
-      'Verifique seu email - ARBFLASH',
+      "Verifique seu email - ARBFLASH",
       `
         <h2>Bem-vindo ao ARBFLASH!</h2>
         <p>Olá ${newUser.name},</p>
@@ -112,12 +107,12 @@ router.post('/register', async (req, res) => {
     console.error("Erro no cadastro:", error);
     
     // Capturar erros de validação do Sequelize
-    if (error.name === 'SequelizeValidationError') {
+    if (error.name === "SequelizeValidationError") {
       const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages.join(' ') });
+      return res.status(400).json({ message: messages.join(" ") });
     }
     
-    if (error.name === 'SequelizeUniqueConstraintError') {
+    if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(409).json({ message: "Este email já está cadastrado." });
     }
     
@@ -126,7 +121,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Rota de Login com proteção contra força bruta
-router.post('/login', rateLimitMiddleware, async (req, res) => {
+router.post("/login", rateLimitMiddleware, async (req, res) => {
   try {
     const { email, password } = req.body;
     
@@ -182,19 +177,19 @@ router.post('/login', rateLimitMiddleware, async (req, res) => {
 });
 
 // Rota de Logout
-router.post('/logout', (req, res) => {
+router.post("/logout", (req, res) => {
   req.session.destroy(err => {
     if (err) {
       console.error("Erro no logout:", err);
       return res.status(500).json({ message: "Não foi possível fazer logout." });
     }
-    res.clearCookie('connect.sid');
+    res.clearCookie("connect.sid");
     res.status(200).json({ message: "Logout realizado com sucesso." });
   });
 });
 
 // Rota para verificação de email
-router.get('/verify-email', async (req, res) => {
+router.get("/verify-email", async (req, res) => {
   try {
     const { token } = req.query;
     
@@ -229,7 +224,7 @@ router.get('/verify-email', async (req, res) => {
 });
 
 // Rota para reenviar email de verificação
-router.post('/resend-verification', async (req, res) => {
+router.post("/resend-verification", async (req, res) => {
   try {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Usuário não autenticado." });
@@ -249,10 +244,11 @@ router.post('/resend-verification', async (req, res) => {
     await user.save();
 
     // Enviar email
-    const verificationLink = `${req.protocol}://${req.get('host')}/api/users/verify-email?token=${verificationToken}`;
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const verificationLink = `${baseUrl}/api/users/verify-email?token=${verificationToken}`;
     await sendEmail(
       user.email,
-      'Verifique seu email - ARBFLASH',
+      "Verifique seu email - ARBFLASH",
       `
         <h2>Verificação de Email</h2>
         <p>Olá ${user.name},</p>
@@ -271,7 +267,7 @@ router.post('/resend-verification', async (req, res) => {
 });
 
 // Rota para solicitar recuperação de senha
-router.post('/forgot-password', rateLimitMiddleware, async (req, res) => {
+router.post("/forgot-password", rateLimitMiddleware, async (req, res) => {
   try {
     const { email } = req.body;
     
@@ -289,7 +285,7 @@ router.post('/forgot-password', rateLimitMiddleware, async (req, res) => {
     }
 
     // Gerar token de reset
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetToken = crypto.randomBytes(32).toString("hex");
     const resetTokenExpiry = new Date(Date.now() + 3600000); // Token expira em 1 hora
 
     await user.update({
@@ -298,10 +294,11 @@ router.post('/forgot-password', rateLimitMiddleware, async (req, res) => {
     });
 
     // Enviar email com link de reset
-    const resetLink = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`;
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
     await sendEmail(
       user.email,
-      'Redefinir senha - ARBFLASH',
+      "Redefinir senha - ARBFLASH",
       `
         <h2>Redefinição de Senha</h2>
         <p>Olá ${user.name},</p>
@@ -325,7 +322,7 @@ router.post('/forgot-password', rateLimitMiddleware, async (req, res) => {
 });
 
 // Rota para redefinir a senha
-router.post('/reset-password', async (req, res) => {
+router.post("/reset-password", async (req, res) => {
   try {
     const { token, newPassword } = req.body;
     
@@ -345,7 +342,7 @@ router.post('/reset-password', async (req, res) => {
     }
 
     // Atualizar senha e limpar token
-    user.password = newPassword; // O hook 'beforeUpdate' irá criptografar
+    user.password = newPassword; // O hook "beforeUpdate" irá criptografar
     user.resetToken = null;
     user.resetTokenExpiry = null;
     user.loginAttempts = 0; // Resetar tentativas de login
@@ -356,7 +353,7 @@ router.post('/reset-password', async (req, res) => {
     // Enviar email de confirmação
     await sendEmail(
       user.email,
-      'Senha redefinida - ARBFLASH',
+      "Senha redefinida - ARBFLASH",
       `
         <h2>Senha Redefinida</h2>
         <p>Olá ${user.name},</p>
@@ -371,9 +368,9 @@ router.post('/reset-password', async (req, res) => {
     console.error("Erro ao redefinir senha:", error);
     
     // Retornar erro de validação de senha fraca, se houver
-    if (error.name === 'SequelizeValidationError') {
+    if (error.name === "SequelizeValidationError") {
       const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages.join(' ') });
+      return res.status(400).json({ message: messages.join(" ") });
     }
     
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -381,14 +378,14 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // Rota para buscar informações do usuário atual
-router.get('/me', async (req, res) => {
+router.get("/me", async (req, res) => {
   try {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Usuário não autenticado." });
     }
 
     const user = await User.findByPk(req.session.userId, {
-      attributes: ['id', 'name', 'email', 'whatsapp', 'emailVerified', 'subscriptionStatus', 'createdAt']
+      attributes: ["id", "name", "email", "whatsapp", "emailVerified", "subscriptionStatus", "createdAt"]
     });
 
     if (!user) {
@@ -404,7 +401,7 @@ router.get('/me', async (req, res) => {
 });
 
 // Rota para atualizar perfil do usuário
-router.put('/profile', async (req, res) => {
+router.put("/profile", async (req, res) => {
   try {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Usuário não autenticado." });
@@ -438,9 +435,9 @@ router.put('/profile', async (req, res) => {
   } catch (error) {
     console.error("Erro ao atualizar perfil:", error);
     
-    if (error.name === 'SequelizeValidationError') {
+    if (error.name === "SequelizeValidationError") {
       const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages.join(' ') });
+      return res.status(400).json({ message: messages.join(" ") });
     }
     
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -448,7 +445,7 @@ router.put('/profile', async (req, res) => {
 });
 
 // Rota para BUSCAR as configurações do usuário
-router.get('/settings', async (req, res) => {
+router.get("/settings", async (req, res) => {
   if (!req.session.userId) {
     return res.status(401).json({ message: "Usuário não autenticado." });
   }
@@ -466,7 +463,7 @@ router.get('/settings', async (req, res) => {
 });
 
 // Rota para SALVAR as configurações do usuário
-router.post('/settings', async (req, res) => {
+router.post("/settings", async (req, res) => {
   if (!req.session.userId) {
     return res.status(401).json({ message: "Usuário não autenticado." });
   }
@@ -475,6 +472,9 @@ router.post('/settings', async (req, res) => {
     const fieldsToUpdate = {};
     if (req.body.watchedPairs !== undefined) fieldsToUpdate.watchedPairs = req.body.watchedPairs;
     
+    // Adicione aqui outras configurações que deseja salvar no UserConfiguration
+    // Exemplo: if (req.body.someOtherSetting !== undefined) fieldsToUpdate.someOtherSetting = req.body.someOtherSetting;
+
     if (Object.keys(fieldsToUpdate).length === 0) {
       return res.status(400).json({ message: "Nenhum dado de configuração válido para atualizar." });
     }
@@ -488,3 +488,5 @@ router.post('/settings', async (req, res) => {
 });
 
 module.exports = router;
+
+
