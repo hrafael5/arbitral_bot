@@ -1,13 +1,18 @@
 const nodemailer = require('nodemailer');
 
 // Configura o transporte de e‑mail usando variáveis de ambiente.
+// Cria o transportador SMTP. Algumas hospedagens utilizam certificados autoassinados,
+// portanto adicionamos tls.rejectUnauthorized: false para evitar falhas na verificação.
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_SECURE === 'true', // true para SSL, false para STARTTLS
+  port: parseInt(process.env.SMTP_PORT, 10) || 587,
+  secure: process.env.SMTP_SECURE === 'true', // true para SSL (porta 465), false para STARTTLS (porta 587)
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false,
   },
 });
 
