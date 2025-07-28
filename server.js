@@ -170,6 +170,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 const userRoutes = require('./routes/user.routes');
 app.use('/api/users', userRoutes);
 
+// Importa e monta as rotas de redefinição de senha
+const passwordResetRoutes = require('./routes/passwordReset.routes');
+app.use('/api/users', passwordResetRoutes);
+
 const isAuthenticated = (req, res, next) => {
     if (req.session && req.session.userId) {
         return next();

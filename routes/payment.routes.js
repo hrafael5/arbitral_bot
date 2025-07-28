@@ -3,6 +3,10 @@ const router = express.Router();
 const User = require('../models/user.model'); // Aceder ao nosso modelo de utilizador
 require('dotenv').config();
 
+// Serviço de email para envio de boas‑vindas aos novos assinantes.
+// Este módulo precisa estar disponível em utils/emailService.js conforme sugerido.
+const { sendWelcomeEmail } = require('../utils/emailService');
+
 // Inicializar o Stripe com a sua chave secreta do .env
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
@@ -98,8 +102,13 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
                 
                 console.log(`✅ Novo utilizador criado a partir do pagamento: ${user.id}`);
                 
-                // Ação recomendada: Enviar um email de boas-vindas para o novo utilizador
-                // com um link para ele definir a sua senha.
+                // Enviar email de boas‑vindas para o novo utilizador com link para definir a sua senha.
+                try {
+                    await sendWelcomeEmail(customerEmail);
+                    console.log(`📧 Email de boas‑vindas enviado para ${customerEmail}`);
+                } catch (err) {
+                    console.error(`Falha ao enviar email de boas‑vindas para ${customerEmail}:`, err);
+                }
             }
             break;
         }
