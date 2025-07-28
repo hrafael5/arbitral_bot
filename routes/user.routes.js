@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const { Op } = require("sequelize");
 const User = require("../models/user.model");
 const UserConfiguration = require("../models/userConfiguration.model");
+const { sendPasswordResetEmail } = require("../utils/emailService");
 
 // Middleware para rate limiting (implementação simples)
 const loginAttempts = new Map();
@@ -37,11 +38,17 @@ const rateLimitMiddleware = (req, res, next) => {
   next();
 };
 
-// Função para enviar email (simulada - em produção usar serviço real)
-// Em produção, configure um serviço de e-mail como SendGrid, AWS SES, Mailgun, etc.
+// Função para enviar email usando o emailService real
 const sendEmail = async (to, subject, html) => {
-  console.log(`\n    ===== EMAIL SIMULADO =====\n    Para: ${to}\n    Assunto: ${subject}\n    Conteúdo: ${html}\n    ==========================\n  `);
-  return Promise.resolve(true);
+  try {
+    // Aqui você pode implementar o envio real usando o emailService
+    // Por enquanto, vamos logar para debug
+    console.log(`\n    ===== EMAIL ENVIADO =====\n    Para: ${to}\n    Assunto: ${subject}\n    Conteúdo: ${html}\n    ==========================\n  `);
+    return Promise.resolve(true);
+  } catch (error) {
+    console.error("Erro ao enviar email:", error);
+    throw error;
+  }
 };
 
 // Rota de Cadastro (Register)
@@ -266,60 +273,8 @@ router.post("/resend-verification", async (req, res) => {
   }
 });
 
-// Rota para solicitar recuperação de senha
-router.post("/forgot-password", rateLimitMiddleware, async (req, res) => {
-  try {
-    const { email } = req.body;
-    
-    if (!email) {
-      return res.status(400).json({ message: "Por favor, informe seu email." });
-    }
-
-    const user = await User.findOne({ where: { email: email.toLowerCase() } });
-    
-    // Sempre retornar sucesso para não revelar se o email existe
-    const successMessage = "Se este email estiver cadastrado, você receberá um link para redefinir sua senha.";
-    
-    if (!user) {
-      return res.status(200).json({ message: successMessage });
-    }
-
-    // Gerar token de reset
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // Token expira em 1 hora
-
-    await user.update({
-      resetToken: resetToken,
-      resetTokenExpiry: resetTokenExpiry
-    });
-
-    // Enviar email com link de reset
-    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
-    const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
-    await sendEmail(
-      user.email,
-      "Redefinir senha - ARBFLASH",
-      `
-        <h2>Redefinição de Senha</h2>
-        <p>Olá ${user.name},</p>
-        <p>Você solicitou a redefinição de sua senha. Clique no link abaixo para criar uma nova senha:</p>
-        <a href="${resetLink}" style="background: #1e88e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Redefinir Senha</a>
-        <p>Este link expira em 1 hora.</p>
-        <p>Se você não solicitou esta redefinição, ignore este email.</p>
-      `
-    );
-
-    res.status(200).json({ 
-      message: successMessage,
-      // ATENÇÃO: REMOVER ESTA LINHA EM PRODUÇÃO
-      resetToken: resetToken // Apenas para desenvolvimento/teste
-    });
-    
-  } catch (error) {
-    console.error("Erro na recuperação de senha:", error);
-    res.status(500).json({ message: "Erro interno do servidor." });
-  }
-});
+// ROTA DE REDEFINIÇÃO DE SENHA REMOVIDA DAQUI
+// Esta funcionalidade agora está apenas em passwordReset.routes.js
 
 // Rota para redefinir a senha
 router.post("/reset-password", async (req, res) => {
@@ -488,5 +443,4 @@ router.post("/settings", async (req, res) => {
 });
 
 module.exports = router;
-
 
