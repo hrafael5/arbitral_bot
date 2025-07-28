@@ -273,64 +273,8 @@ router.post("/resend-verification", async (req, res) => {
   }
 });
 
-// ROTA DE REDEFINIÇÃO DE SENHA REMOVIDA DAQUI
-// Esta funcionalidade agora está apenas em passwordReset.routes.js
-
-// Rota para redefinir a senha
-router.post("/reset-password", async (req, res) => {
-  try {
-    const { token, newPassword } = req.body;
-    
-    if (!token || !newPassword) {
-      return res.status(400).json({ message: "Token e nova senha são obrigatórios." });
-    }
-
-    const user = await User.findOne({ 
-      where: { 
-        resetToken: token,
-        resetTokenExpiry: { [Op.gt]: new Date() }
-      } 
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: "Token inválido ou expirado." });
-    }
-
-    // Atualizar senha e limpar token
-    user.password = newPassword; // O hook "beforeUpdate" irá criptografar
-    user.resetToken = null;
-    user.resetTokenExpiry = null;
-    user.loginAttempts = 0; // Resetar tentativas de login
-    user.lockedUntil = null; // Desbloquear conta se estiver bloqueada
-    
-    await user.save();
-
-    // Enviar email de confirmação
-    await sendEmail(
-      user.email,
-      "Senha redefinida - ARBFLASH",
-      `
-        <h2>Senha Redefinida</h2>
-        <p>Olá ${user.name},</p>
-        <p>Sua senha foi redefinida com sucesso.</p>
-        <p>Se você não fez esta alteração, entre em contato conosco imediatamente.</p>
-      `
-    );
-
-    res.status(200).json({ message: "Senha redefinida com sucesso!" });
-    
-  } catch (error) {
-    console.error("Erro ao redefinir senha:", error);
-    
-    // Retornar erro de validação de senha fraca, se houver
-    if (error.name === "SequelizeValidationError") {
-      const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages.join(" ") });
-    }
-    
-    res.status(500).json({ message: "Erro interno do servidor." });
-  }
-});
+// ROTA DE REDEFINIÇÃO DE SENHA REMOVIDA COMPLETAMENTE
+// Esta funcionalidade agora está APENAS em passwordReset.routes.js
 
 // Rota para buscar informações do usuário atual
 router.get("/me", async (req, res) => {
