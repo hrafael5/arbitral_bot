@@ -20,7 +20,8 @@ router.post('/forgot-password', async (req, res) => {
     // Gera token e define validade de 1 hora
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 3600 * 1000);
-    await user.update({ passwordResetToken: token, passwordResetExpires: expires });
+    // Armazena o token e a expiração nos campos existentes no modelo (resetToken, resetTokenExpiry)
+    await user.update({ resetToken: token, resetTokenExpiry: expires });
     await sendPasswordResetEmail(email, token);
     return res.status(200).json({ message: 'Email de redefinição enviado' });
   } catch (error) {
@@ -38,16 +39,16 @@ router.post('/reset-password', async (req, res) => {
     }
     const user = await User.findOne({
       where: {
-        passwordResetToken: token,
-        passwordResetExpires: { [Op.gt]: new Date() },
+        resetToken: token,
+        resetTokenExpiry: { [Op.gt]: new Date() },
       },
     });
     if (!user) {
       return res.status(400).json({ message: 'Token inválido ou expirado' });
     }
     user.password = password;
-    user.passwordResetToken = null;
-    user.passwordResetExpires = null;
+    user.resetToken = null;
+    user.resetTokenExpiry = null;
     await user.save();
     return res.status(200).json({ message: 'Senha redefinida com sucesso' });
   } catch (error) {

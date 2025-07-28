@@ -269,4 +269,125 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // --- LÓGICA DE ESQUECI A SENHA ---
+    const forgotPasswordForm = document.getElementById('forgot-password-form');
+    if (forgotPasswordForm) {
+        const forgotButton = document.getElementById('forgot-button');
+        const messageEl = document.getElementById('message');
+        const resetFormContainer = document.getElementById('reset-form');
+
+        function setLoadingForgot(isLoading) {
+            const textEl = forgotButton.querySelector('.button-text');
+            const spinnerEl = forgotButton.querySelector('.loading-spinner');
+            if (isLoading) {
+                forgotButton.disabled = true;
+                if(textEl) textEl.style.display = 'none';
+                if(spinnerEl) spinnerEl.style.display = 'block';
+            } else {
+                forgotButton.disabled = false;
+                if(textEl) textEl.style.display = 'block';
+                if(spinnerEl) spinnerEl.style.display = 'none';
+            }
+        }
+
+        forgotPasswordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            messageEl.textContent = '';
+            messageEl.classList.remove('error', 'success');
+            const emailInput = forgotPasswordForm.querySelector('#email');
+            const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+            if (!email) {
+                messageEl.textContent = 'Por favor, digite seu e‑mail.';
+                messageEl.classList.add('error');
+                return;
+            }
+            setLoadingForgot(true);
+            try {
+                const response = await fetch('/api/users/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    messageEl.textContent = data.message || 'E‑mail de recuperação enviado. Verifique sua caixa de entrada.';
+                    messageEl.classList.add('success');
+                    // Mostra o formulário de reset para inserir o token manualmente
+                    if (resetFormContainer) {
+                        resetFormContainer.style.display = 'block';
+                    }
+                } else {
+                    messageEl.textContent = data.message || 'Não foi possível enviar o e‑mail de recuperação.';
+                    messageEl.classList.add('error');
+                }
+            } catch (error) {
+                console.error('Erro ao solicitar redefinição:', error);
+                messageEl.textContent = 'Ocorreu um erro ao enviar a solicitação. Tente novamente.';
+                messageEl.classList.add('error');
+            } finally {
+                setLoadingForgot(false);
+            }
+        });
+    }
+
+    // --- LÓGICA DE RESET DE SENHA ---
+    const resetPasswordForm = document.getElementById('reset-password-form');
+    if (resetPasswordForm) {
+        const resetButton = document.getElementById('reset-button');
+        const messageEl = document.getElementById('message');
+
+        function setLoadingReset(isLoading) {
+            const textEl = resetButton.querySelector('.button-text');
+            const spinnerEl = resetButton.querySelector('.loading-spinner');
+            if (isLoading) {
+                resetButton.disabled = true;
+                if(textEl) textEl.style.display = 'none';
+                if(spinnerEl) spinnerEl.style.display = 'block';
+            } else {
+                resetButton.disabled = false;
+                if(textEl) textEl.style.display = 'block';
+                if(spinnerEl) spinnerEl.style.display = 'none';
+            }
+        }
+
+        resetPasswordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            messageEl.textContent = '';
+            messageEl.classList.remove('error', 'success');
+            const tokenInput = resetPasswordForm.querySelector('#token');
+            const newPasswordInput = resetPasswordForm.querySelector('#newPassword');
+            const token = tokenInput ? tokenInput.value.trim() : '';
+            const newPassword = newPasswordInput ? newPasswordInput.value : '';
+            if (!token || !newPassword) {
+                messageEl.textContent = 'Token e nova senha são obrigatórios.';
+                messageEl.classList.add('error');
+                return;
+            }
+            setLoadingReset(true);
+            try {
+                const response = await fetch('/api/users/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, password: newPassword })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    messageEl.textContent = data.message || 'Senha redefinida com sucesso!';
+                    messageEl.classList.add('success');
+                    // Oculta o formulário de reset para evitar múltiplas submissões
+                    resetPasswordForm.reset();
+                } else {
+                    messageEl.textContent = data.message || 'Não foi possível redefinir a senha.';
+                    messageEl.classList.add('error');
+                }
+            } catch (error) {
+                console.error('Erro ao redefinir senha:', error);
+                messageEl.textContent = 'Ocorreu um erro ao redefinir a senha. Tente novamente.';
+                messageEl.classList.add('error');
+            } finally {
+                setLoadingReset(false);
+            }
+        });
+    }
 });
