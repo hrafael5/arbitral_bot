@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/user.model');
 require('dotenv').config();
-const { sendWelcomeEmail } = require('../utils/emailService');
+const { sendWelcomeEmail, sendUpgradeEmail } = require("../utils/emailService");
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // ROTA 1 – CRIA A SESSÃO DE CHECKOUT
@@ -76,7 +76,7 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
 
                 // Envia e-mail mesmo que o usuário já exista
                 try {
-                    await sendWelcomeEmail(customerEmail);
+                    await sendUpgradeEmail(customerEmail);
                     console.log(`📧 E-mail de boas-vindas reenviado para ${customerEmail}`);
                 } catch (err) {
                     console.error(`Erro ao enviar e-mail de boas-vindas para usuário existente:`, err);

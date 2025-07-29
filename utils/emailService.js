@@ -36,7 +36,7 @@ async function testConnection() {
   }
 }
 
-// Função para enviar email de boas-vindas (mesmo que o usuário já exista)
+// Função para enviar email de boas-vindas (para novos usuários)
 async function sendWelcomeEmail(toEmail) {
   try {
     console.log(`📤 Enviando email de boas-vindas para: ${toEmail}`);
@@ -52,7 +52,6 @@ async function sendWelcomeEmail(toEmail) {
         <p>Obrigado por assinar o ARBFLASH.</p>
         <p>Para definir a sua senha e acessar o painel, clique no link abaixo:</p>
         <p><a href="${resetLink}">${resetLink}</a></p>
-        <p>Se você já criou uma senha anteriormente, basta fazer login normalmente.</p>
         <p>Qualquer dúvida, estamos à disposição!</p>
       `,
     };
@@ -63,6 +62,38 @@ async function sendWelcomeEmail(toEmail) {
     return result;
   } catch (error) {
     console.error("❌ Erro ao enviar email de boas-vindas:", error.message);
+    console.error("📋 Detalhes do erro:", error);
+    throw error;
+  }
+}
+
+// Função para enviar email de atualização de assinatura (para usuários existentes)
+async function sendUpgradeEmail(toEmail) {
+  try {
+    console.log(`📤 Enviando email de atualização de assinatura para: ${toEmail}`);
+    
+    const loginLink = `${process.env.APP_BASE_URL || "https://app.arbflash.com"}/login.html`;
+
+    const message = {
+      from: process.env.FROM_EMAIL || "no-reply@arbflash.com",
+      to: toEmail,
+      subject: "Sua assinatura ARBFLASH foi atualizada!",
+      html: `
+        <p>Olá!</p>
+        <p>Sua assinatura ARBFLASH foi atualizada com sucesso para o plano Premium.</p>
+        <p>Você já pode acessar todas as funcionalidades premium do seu painel.</p>
+        <p>Clique no link abaixo para fazer login:</p>
+        <p><a href="${loginLink}">${loginLink}</a></p>
+        <p>Qualquer dúvida, estamos à disposição!</p>
+      `,
+    };
+
+    const result = await transporter.sendMail(message);
+    console.log("✅ Email de atualização de assinatura enviado com sucesso!");
+    console.log("📋 ID da mensagem:", result.messageId);
+    return result;
+  } catch (error) {
+    console.error("❌ Erro ao enviar email de atualização de assinatura:", error.message);
     console.error("📋 Detalhes do erro:", error);
     throw error;
   }
@@ -113,5 +144,8 @@ async function sendPasswordResetEmail(toEmail, token) {
 module.exports = {
   sendWelcomeEmail,
   sendPasswordResetEmail,
+  sendUpgradeEmail,
   testConnection,
 };
+
+
