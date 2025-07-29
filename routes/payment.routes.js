@@ -1,19 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/user.model'); // Aceder ao nosso modelo de utilizador
+const User = require('../models/user.model');
 require('dotenv').config();
-
-// Serviço de email para envio de boas‑vindas aos novos assinantes.
-// Este módulo precisa estar disponível em utils/emailService.js conforme sugerido.
 const { sendWelcomeEmail } = require('../utils/emailService');
-
-// Inicializar o Stripe com a sua chave secreta do .env
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// ROTA 1: CRIAR A SESSÃO DE CHECKOUT (Permite utilizadores não logados)
+// ROTA 1 – CRIA A SESSÃO DE CHECKOUT
 router.post('/create-checkout-session', async (req, res) => {
     try {
-        const priceId = 'price_1Rlxp7LUk7QOPN8ooQoUqbQ7'; // O seu ID de preço
+        const priceId = 'price_1Rlxp7LUk7QOPN8ooQoUqbQ7';
 
         const sessionPayload = {
             payment_method_types: ['card'],
@@ -27,17 +22,16 @@ router.post('/create-checkout-session', async (req, res) => {
             metadata: {}
         };
 
-        // Se o utilizador JÁ ESTIVER LOGADO, pré-preenchemos o email e guardamos o ID dele
         if (req.session && req.session.userId) {
             const user = await User.findByPk(req.session.userId);
             if (user) {
                 sessionPayload.customer_email = user.email;
-                sessionPayload.metadata.userId = req.session.userId;
+                sessionPayload.metadata.userId = user.id;
+                sessionPayload.client_reference_id = user.id.toString();
             }
         }
 
         const session = await stripe.checkout.sessions.create(sessionPayload);
-
         res.json({ sessionId: session.id });
 
     } catch (error) {
@@ -46,68 +40,66 @@ router.post('/create-checkout-session', async (req, res) => {
     }
 });
 
-
-// ROTA 2: RECEBER OS WEBHOOKS DO STRIPE (Cria ou atualiza utilizador)
+// ROTA 2 – RECEBE OS WEBHOOKS DO STRIPE
 router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
     let event;
 
     try {
-        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
     } catch (err) {
-        console.error(`⚠️  Erro na verificação do webhook: ${err.message}`);
+        console.error(`⚠️ Erro de verificação do webhook: ${err.message}`);
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    // Lidar com o evento
     switch (event.type) {
         case 'checkout.session.completed': {
             const session = event.data.object;
             const stripeCustomerId = session.customer;
             const stripeSubscriptionId = session.subscription;
-            
-            // O email que o cliente digitou no checkout do Stripe
             const customerEmail = session.customer_details.email.toLowerCase();
-            
             const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-
-            // Verificar se o utilizador já existe na nossa base de dados
-            let user = await User.findOne({ where: { email: customerEmail } });
 
             const userData = {
                 subscriptionStatus: 'active',
-                stripeCustomerId: stripeCustomerId,
-                stripeSubscriptionId: stripeSubscriptionId,
+                stripeCustomerId,
+                stripeSubscriptionId,
                 stripePriceId: subscription.items.data[0].price.id,
                 stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000)
             };
 
+            let user = await User.findOne({ where: { email: customerEmail } });
+
             if (user) {
-                // Se o utilizador já existe, apenas atualizamos os seus dados de assinatura
                 await user.update(userData);
-                console.log(`✅ Assinatura ativada para o utilizador existente: ${user.id}`);
+                console.log(`✅ Assinatura ativada para usuário existente (${user.email})`);
+
+                // Envia e-mail mesmo que o usuário já exista
+                try {
+                    await sendWelcomeEmail(customerEmail);
+                    console.log(`📧 E-mail de boas-vindas reenviado para ${customerEmail}`);
+                } catch (err) {
+                    console.error(`Erro ao enviar e-mail de boas-vindas para usuário existente:`, err);
+                }
+
             } else {
-                // Se o utilizador não existe, criamos uma nova conta para ele
                 const tempPassword = require('crypto').randomBytes(16).toString('hex');
 
                 user = await User.create({
                     email: customerEmail,
                     name: session.customer_details.name || 'Novo Assinante',
-                    password: tempPassword, // O hook do modelo irá encriptar
-                    emailVerified: true, // Consideramos o email verificado, pois ele pagou
+                    password: tempPassword,
+                    emailVerified: true,
                     ...userData
                 });
-                
-                console.log(`✅ Novo utilizador criado a partir do pagamento: ${user.id}`);
-                
-                // Enviar email de boas‑vindas para o novo utilizador com link para definir a sua senha.
+
+                console.log(`✅ Novo usuário criado: ${user.email}`);
+
                 try {
                     await sendWelcomeEmail(customerEmail);
-                    console.log(`📧 Email de boas‑vindas enviado para ${customerEmail}`);
+                    console.log(`📧 E-mail de boas-vindas enviado para novo usuário ${customerEmail}`);
                 } catch (err) {
-                    console.error(`Falha ao enviar email de boas‑vindas para ${customerEmail}:`, err);
+                    console.error(`Erro ao enviar e-mail de boas-vindas:`, err);
                 }
             }
             break;
@@ -122,30 +114,30 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
                 stripePriceId: subscription.items.data[0].price.id,
                 stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000)
             }, {
-                where: { stripeCustomerId: stripeCustomerId }
+                where: { stripeCustomerId }
             });
-            
-            console.log(`🔄 Assinatura atualizada para o cliente ${stripeCustomerId}. Novo status: ${subscription.status}.`);
+
+            console.log(`🔁 Assinatura atualizada: ${stripeCustomerId} (${subscription.status})`);
             break;
         }
-        
+
         case 'customer.subscription.deleted': {
             const subscription = event.data.object;
             const stripeCustomerId = subscription.customer;
 
             await User.update({
                 subscriptionStatus: 'canceled',
-                stripeSubscriptionId: null,
+                stripeSubscriptionId: null
             }, {
-                where: { stripeCustomerId: stripeCustomerId }
+                where: { stripeCustomerId }
             });
 
-            console.log(`🚫 Assinatura cancelada para o cliente ${stripeCustomerId}.`);
+            console.log(`🚫 Assinatura cancelada: ${stripeCustomerId}`);
             break;
         }
 
         default:
-            console.log(`Evento de webhook não tratado: ${event.type}`);
+            console.log(`📌 Evento não tratado: ${event.type}`);
     }
 
     res.status(200).json({ received: true });

@@ -1,12 +1,10 @@
 const nodemailer = require("nodemailer");
 
 // Configura o transporte de e‑mail usando variáveis de ambiente.
-// Cria o transportador SMTP. Algumas hospedagens utilizam certificados autoassinados,
-// portanto adicionamos tls.rejectUnauthorized: false para evitar falhas na verificação.
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT, 10) || 587,
-  secure: process.env.SMTP_SECURE === "true", // true para SSL (porta 465), false para STARTTLS (porta 587)
+  secure: process.env.SMTP_SECURE === "true",
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -14,10 +12,9 @@ const transporter = nodemailer.createTransport({
   tls: {
     rejectUnauthorized: false,
   },
-  // Adicionar configurações específicas para Titan Email
-  connectionTimeout: 60000, // 60 segundos
-  greetingTimeout: 30000,   // 30 segundos
-  socketTimeout: 60000,     // 60 segundos
+  connectionTimeout: 60000,
+  greetingTimeout: 30000,
+  socketTimeout: 60000,
 });
 
 // Função para testar a conexão SMTP
@@ -39,15 +36,11 @@ async function testConnection() {
   }
 }
 
-/**
- * Envia um e‑mail de boas‑vindas com link para definição de senha.
- * @param {string} toEmail Email do destinatário.
- */
+// Função para enviar email de boas-vindas (mesmo que o usuário já exista)
 async function sendWelcomeEmail(toEmail) {
   try {
     console.log(`📤 Enviando email de boas-vindas para: ${toEmail}`);
     
-    // Gera link para a página de redefinição de senha, anexando o e‑mail como query.
     const resetLink = `${process.env.APP_BASE_URL || "https://app.arbflash.com"}/forgot-password.html?email=${encodeURIComponent(toEmail)}`;
 
     const message = {
@@ -75,17 +68,12 @@ async function sendWelcomeEmail(toEmail) {
   }
 }
 
-/**
- * Envia um e‑mail de redefinição de senha com um token de reset.
- * @param {string} toEmail Email do destinatário.
- * @param {string} token Token gerado para o reset.
- */
+// Função para envio de e-mail de redefinição de senha
 async function sendPasswordResetEmail(toEmail, token) {
   try {
     console.log(`📤 Enviando email de redefinição de senha para: ${toEmail}`);
     console.log(`🔑 Token gerado: ${token.substring(0, 8)}...`);
-    
-    // Use a página de recuperação existente, passando o token como parâmetro.
+
     const resetLink = `${process.env.APP_BASE_URL || "https://app.arbflash.com"}/forgot-password.html?token=${encodeURIComponent(token)}`;
     
     const message = {
@@ -110,7 +98,6 @@ async function sendPasswordResetEmail(toEmail, token) {
     console.error("❌ Erro ao enviar email de redefinição de senha:", error.message);
     console.error("📋 Detalhes do erro:", error);
     
-    // Log adicional para debug específico do Titan
     if (error.code === "EAUTH") {
       console.error("🔐 Erro de autenticação - verifique SMTP_USER e SMTP_PASS");
     } else if (error.code === "ECONNECTION") {
@@ -123,9 +110,8 @@ async function sendPasswordResetEmail(toEmail, token) {
   }
 }
 
-module.exports = { 
-  sendWelcomeEmail, 
-  sendPasswordResetEmail, 
-  testConnection 
+module.exports = {
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+  testConnection,
 };
-
