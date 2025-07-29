@@ -34,6 +34,33 @@ function generateStrongTempPassword() {
     return password.split('').sort(() => Math.random() - 0.5).join('');
 }
 
+// Função para converter timestamp do Stripe para data válida
+function convertStripeTimestamp(timestamp) {
+    try {
+        if (!timestamp || isNaN(timestamp)) {
+            console.log(`⚠️ Timestamp inválido recebido: ${timestamp}`);
+            // Retorna data padrão de 30 dias a partir de agora
+            return new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
+        }
+        
+        const date = new Date(timestamp * 1000);
+        
+        // Verificar se a data é válida
+        if (isNaN(date.getTime())) {
+            console.log(`⚠️ Data inválida gerada do timestamp: ${timestamp}`);
+            // Retorna data padrão de 30 dias a partir de agora
+            return new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
+        }
+        
+        console.log(`✅ Data convertida com sucesso: ${date.toISOString()}`);
+        return date;
+    } catch (error) {
+        console.error(`❌ Erro ao converter timestamp ${timestamp}:`, error);
+        // Retorna data padrão de 30 dias a partir de agora
+        return new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
+    }
+}
+
 // ROTA 1: CRIAR A SESSÃO DE CHECKOUT (Permite utilizadores não logados)
 router.post('/create-checkout-session', async (req, res) => {
     try {
@@ -103,17 +130,26 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
 
             try {
                 const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+                console.log(`📅 Current period end (timestamp): ${subscription.current_period_end}`);
 
                 // Verificar se o utilizador já existe na nossa base de dados
                 let user = await User.findOne({ where: { email: customerEmail } });
+
+                // Converter timestamp para data válida
+                const periodEndDate = convertStripeTimestamp(subscription.current_period_end);
 
                 const userData = {
                     subscriptionStatus: 'active',
                     stripeCustomerId: stripeCustomerId,
                     stripeSubscriptionId: stripeSubscriptionId,
                     stripePriceId: subscription.items.data[0].price.id,
-                    stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000)
+                    stripeCurrentPeriodEnd: periodEndDate
                 };
+
+                console.log(`📋 Dados do usuário a serem salvos:`, {
+                    ...userData,
+                    stripeCurrentPeriodEnd: userData.stripeCurrentPeriodEnd.toISOString()
+                });
 
                 if (user) {
                     // Se o utilizador já existe, apenas atualizamos os seus dados de assinatura
@@ -154,10 +190,13 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
             const stripeCustomerId = subscription.customer;
 
             try {
+                // Converter timestamp para data válida
+                const periodEndDate = convertStripeTimestamp(subscription.current_period_end);
+
                 await User.update({
                     subscriptionStatus: subscription.status,
                     stripePriceId: subscription.items.data[0].price.id,
-                    stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000)
+                    stripeCurrentPeriodEnd: periodEndDate
                 }, {
                     where: { stripeCustomerId: stripeCustomerId }
                 });
