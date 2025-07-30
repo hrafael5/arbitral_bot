@@ -366,189 +366,92 @@ function getFilteredOpportunities() {
         return buyAllowed && sellAllowed;
     });
 
-    // Aplica o filtro de funding rate
-    opportunities = opportunities.filter(opWrapper => {
-        const op = opWrapper.data;
-        const fundingRate = op.fundingRate;
+    // Filtrar oportunidades bloqueadas para usuários free
+    if (state.currentUserSubscriptionStatus === 'free') {
+        opportunities = opportunities.filter(opWrapper => {
+            const op = opWrapper.data;
+            // Bloquear oportunidades com lucro de entrada >= 1%
+            if (op.netSpreadPercentage >= 1.0) {
+                // Adicionar ao blockedOps se ainda não estiver lá
+                const blockedKey = `${op.pair}-${op.direction}`;
+                if (!state.blockedOps.some(blockedOp => blockedOp.key === blockedKey)) {
+                    state.blockedOps.push({ key: blockedKey, op: op });
+                }
+                return false; // Não incluir na lista de oportunidades visíveis
+            }
+            return true; // Incluir na lista de oportunidades visíveis
+        });
+    }
 
-        if (state.filters.minFundingRate !== null && fundingRate < state.filters.minFundingRate) {
-            return false;
-        }
-        if (state.filters.maxFundingRate !== null && fundingRate > state.filters.maxFundingRate) {
-            return false;
-        }
-        return true;
-    });
+    // Atualizar contagem de oportunidades bloqueadas
+    blockedOpsCountEl.textContent = state.blockedOps.length;
 
     return opportunities;
 }
 
 function calculateLucroS(op, allPairsData, config) {
-    // Implementação da função calculateLucroS (assumindo que já existe ou será fornecida)
-    // Esta é uma função placeholder, você deve ter a lógica real aqui.
-    // Se esta função não existir, as visualizações de Saída OP e Ambos Positivos não funcionarão corretamente.
-    return op.lucroS || 0; // Retorna o lucro de saída se existir, senão 0
-}
-
-function getVolumeForFiltering(op) {
-    // Implementação da função getVolumeForFiltering (assumindo que já existe ou será fornecida)
-    // Esta é uma função placeholder, você deve ter a lógica real aqui.
-    return op.volume || 0; // Retorna o volume se existir, senão 0
-}
-
-// --- LÓGICA DE WEBSOCKET ---
-function connectWebSocket() {
-  if (ws) {
-    ws.close();
-  }
-  ws = new WebSocket(`ws://${window.location.host}`);
-
-  ws.onopen = () => {
-    console.log('WebSocket conectado!');
-    state.connected = true;
-    elements.connectionDot.classList.remove('disconnected');
-    elements.connectionDot.classList.add('connected');
-    elements.connectionText.textContent = 'Conectado';
-  };
-
-  ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    if (data.type === 'arbitrageOpportunities') {
-      state.allPairsData = data.allPairsData; // Atualiza todos os dados de pares
-      state.arbitrageOpportunities = data.opportunities.map(op => ({ data: op, timestamp: Date.now() }));
-      state.lastUpdated = new Date();
-      requestUiUpdate();
-    } else if (data.type === 'config') {
-        // Atualiza as configurações do bot (taxas, etc.)
-        state.config = { ...state.config, ...data.config };
-        updateFeeDisplay();
-    }
-  };
-
-  ws.onclose = () => {
-    console.log('WebSocket desconectado. Tentando reconectar em 5 segundos...');
-    state.connected = false;
-    elements.connectionDot.classList.remove('connected');
-    elements.connectionDot.classList.add('disconnected');
-    elements.connectionText.textContent = 'Desconectado';
-    setTimeout(connectWebSocket, 5000);
-  };
-
-  ws.onerror = (error) => {
-    console.error('WebSocket erro:', error);
-    ws.close();
-  };
-}
-
-// --- FUNÇÕES DE ATUALIZAÇÃO DA UI ---
-function requestUiUpdate() {
-  if (!uiUpdateScheduled) {
-    uiUpdateScheduled = true;
-    setTimeout(() => {
-      updateUI();
-      uiUpdateScheduled = false;
-    }, UI_UPDATE_INTERVAL_MS);
-  }
-}
-
-function updateUI() {
-  updateMainTitle();
-  updateOpportunitiesTable();
-  updateBlockedOpsTable();
-  updateWatchedPairsTable();
-  updateMonitorParesTable();
-  updateLastUpdatedDisplay();
+    // Implementação da função calculateLucroS (assumindo que está em outro lugar ou é complexa)
+    // Esta é uma versão simplificada para evitar erros de referência
+    return op.lucroS || 0; // Retorna o lucroS se existir, senão 0
 }
 
 function updateOpportunitiesTable() {
-  const filteredOpportunities = getFilteredOpportunities();
-  const sortedOpportunities = filteredOpportunities.sort((a, b) => {
-    const valA = a.data[state.sortColumn];
-    const valB = b.data[state.sortColumn];
-    if (state.sortDirection === 'asc') {
-      return valA - valB;
-    } else {
-      return valB - valA;
-    }
-  });
+    const filteredOpportunities = getFilteredOpportunities();
+    const sortedOpportunities = filteredOpportunities.sort((a, b) => {
+        const valA = a.data[state.sortColumn];
+        const valB = b.data[state.sortColumn];
 
-  opportunitiesTableBodyEl.innerHTML = '';
-  if (sortedOpportunities.length === 0) {
-    opportunitiesTableBodyEl.innerHTML = '<tr><td colspan="10" class="no-data">Nenhuma oportunidade encontrada com os filtros atuais.</td></tr>';
-    return;
-  }
+        if (typeof valA === 'string') return state.sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        return state.sortDirection === 'asc' ? valA - valB : valB - valA;
+    });
 
-  sortedOpportunities.slice(0, state.maxOpportunitiesToShow).forEach(opWrapper => {
-    const op = opWrapper.data;
-    const row = opportunitiesTableBodyEl.insertRow();
-    row.classList.add('opportunity-row');
-    row.dataset.pair = op.pair;
-    row.dataset.direction = op.direction;
-
-    const isFavorited = state.favoritedOps.includes(`${op.pair}-${op.direction}`);
-    const isBlocked = state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key);
-
-    const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-    const qtdSugerida = arredondarQuantidadeSugerida(state.defaultCapitalUSD / op.buyPrice);
-
-    // Adiciona a classe 'premium-feature' para oportunidades que são Futuros vs Futuros ou Spot vs Spot
-    const isFutFut = (op.buyInstrument?.toLowerCase().includes('futur')) && (op.sellInstrument?.toLowerCase().includes('futur'));
-    const isSpotSpot = (op.buyInstrument?.toLowerCase().includes('spot')) && (op.sellInstrument?.toLowerCase().includes('spot'));
-    if (isFutFut || isSpotSpot) {
-        row.classList.add('premium-feature-row');
+    opportunitiesTableBodyEl.innerHTML = '';
+    if (sortedOpportunities.length === 0) {
+        opportunitiesTableBodyEl.innerHTML = '<tr><td colspan="10" class="no-data">Nenhuma oportunidade de arbitragem.</td></tr>';
+        return;
     }
 
-    row.innerHTML = `
-      <td>
-        <button class="favorite-button ${isFavorited ? 'favorited' : ''}" data-pair="${op.pair}" data-direction="${op.direction}">
-          <svg viewBox="0 0 24 24" fill="${isFavorited ? 'gold' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-          </svg>
-        </button>
-        <button class="block-button ${isBlocked ? 'blocked' : ''}" data-pair="${op.pair}" data-direction="${op.direction}">
-          <svg viewBox="0 0 24 24" fill="${isBlocked ? 'red' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0110 0v4"></path>
-          </svg>
-        </button>
-        ${op.pair}
-      </td>
-      <td>${op.buyExchange} ${op.buyInstrument} ${op.buyPrice}</td>
-      <td>${op.sellExchange} ${op.sellInstrument} ${op.sellPrice}</td>
-      <td class="${op.netSpreadPercentage > 0 ? 'positive' : 'negative'}">${op.netSpreadPercentage.toFixed(4)}%</td>
-      <td class="${lucroS > 0 ? 'positive' : 'negative'}">${lucroS.toFixed(4)}%</td>
-      <td>${formatVolume(op.volume)} / ${formatVolume(op.volumeFutures)}</td>
-      <td>${op.fundingRate !== null ? (op.fundingRate * 100).toFixed(4) + '%' : 'N/A'}</td>
-      <td>${qtdSugerida}</td>
-      <td>${formatTimeAgo(op.firstSeen)}</td>
-      <td>
-        <button class="calculator-button" 
-                data-pair="${op.pair}" 
-                data-direction="${op.direction}" 
-                data-buy-ex="${op.buyExchange}" 
-                data-sell-ex="${op.sellExchange}"
-                data-op-data='${JSON.stringify(op)}'>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-            <path d="M12 16h.01"></path>
-            <path d="M16 16h.01"></path>
-            <path d="M8 16h.01"></path>
-            <path d="M12 12h.01"></path>
-            <path d="M16 12h.01"></path>
-            <path d="M8 12h.01"></path>
-          </svg>
-        </button>
-      </td>
-    `;
-  });
+    sortedOpportunities.slice(0, state.maxOpportunitiesToShow).forEach(opWrapper => {
+        const op = opWrapper.data;
+        const row = opportunitiesTableBodyEl.insertRow();
+        row.classList.add('opportunity-row');
+        if (op.netSpreadPercentage >= state.soundProfitThreshold && state.soundEnabled && !state.soundPlayedForVisibleOps.has(op.pair)) {
+            // playSoundAlert();
+            state.soundPlayedForVisibleOps.add(op.pair);
+        }
 
-  addEventListenersToButtons();
+        // Adiciona classe para oportunidades premium se o usuário for free
+        if (state.currentUserSubscriptionStatus === 'free' && op.netSpreadPercentage >= 1.0) {
+            row.classList.add('premium-opportunity-row');
+        }
+
+        row.innerHTML = `
+            <td>
+                <button class="favorite-button ${state.favoritedOps.includes(op.pair) ? 'favorited' : ''}" data-pair="${escapeHTML(op.pair)}">
+                    ${state.favoritedOps.includes(op.pair) ? '★' : '☆'}
+                </button>
+                <a href="#" class="pair-link" data-pair="${escapeHTML(op.pair)}" data-buy-exchange="${escapeHTML(op.buyExchange)}" data-sell-exchange="${escapeHTML(op.sellExchange)}" data-buy-instrument="${escapeHTML(op.buyInstrument)}" data-sell-instrument="${escapeHTML(op.sellInstrument)}" data-direction="${escapeHTML(op.direction)}" data-op-data='${escapeHTML(JSON.stringify(op))}'>
+                    ${escapeHTML(op.pair)}
+                </a>
+            </td>
+            <td>${escapeHTML(op.buyExchange)} ${escapeHTML(op.buyInstrument)} ${op.buyPrice !== undefined ? op.buyPrice.toFixed(op.pricePrecision) : 'N/A'}</td>
+            <td>${escapeHTML(op.sellExchange)} ${escapeHTML(op.sellInstrument)} ${op.sellPrice !== undefined ? op.sellPrice.toFixed(op.pricePrecision) : 'N/A'}</td>
+            <td class="${op.netSpreadPercentage > 0 ? 'positive' : 'negative'}">${op.netSpreadPercentage !== undefined ? op.netSpreadPercentage.toFixed(2) : 'N/A'}%</td>
+            <td class="${op.lucroS > 0 ? 'positive' : 'negative'}">${op.lucroS !== undefined ? op.lucroS.toFixed(2) : 'N/A'}%</td>
+            <td>${op.buyVolumeUSD !== undefined ? op.buyVolumeUSD.toFixed(0) : 'N/A'} / ${op.sellVolumeUSD !== undefined ? op.sellVolumeUSD.toFixed(0) : 'N/A'}</td>
+            <td class="${op.fundingRate > 0 ? 'positive' : 'negative'}">${op.fundingRate !== undefined ? op.fundingRate.toFixed(3) : 'N/A'}%</td>
+            <td>${arredondarQuantidadeSugerida(op.suggestedQuantity)}</td>
+            <td>${op.firstSeen ? formatTime(op.firstSeen) : 'N/A'}</td>
+            <td>
+                <button class="calculator-button" data-pair="${escapeHTML(op.pair)}" data-direction="${escapeHTML(op.direction)}" data-buy-ex="${escapeHTML(op.buyExchange)}" data-sell-ex="${escapeHTML(op.sellExchange)}">Calc</button>
+            </td>
+        `;
+    });
+
+    updateMainTitle();
 }
 
-function updateBlockedOpsTable() {
+function updateBlockedOpportunitiesTable() {
     blockedOpsTableBodyEl.innerHTML = '';
     if (state.blockedOps.length === 0) {
         blockedOpsTableBodyEl.innerHTML = '<tr><td colspan="8" class="no-data">Nenhuma oportunidade bloqueada.</td></tr>';
@@ -556,604 +459,592 @@ function updateBlockedOpsTable() {
     }
 
     state.blockedOps.forEach(blockedOp => {
+        const op = blockedOp.op;
         const row = blockedOpsTableBodyEl.insertRow();
-        row.classList.add('blocked-op-row');
-        row.dataset.key = blockedOp.key;
+        row.classList.add('blocked-opportunity-row');
 
         row.innerHTML = `
-            <td>${blockedOp.pair}</td>
-            <td>${blockedOp.buyExchange} ${blockedOp.buyInstrument} ${blockedOp.buyPrice}</td>
-            <td>${blockedOp.sellExchange} ${blockedOp.sellInstrument} ${blockedOp.sellPrice}</td>
-            <td>${blockedOp.netSpreadPercentage.toFixed(4)}%</td>
-            <td>${blockedOp.lucroS.toFixed(4)}%</td>
-            <td>${formatVolume(blockedOp.volume)} / ${formatVolume(blockedOp.volumeFutures)}</td>
-            <td>${blockedOp.fundingRate !== null ? (blockedOp.fundingRate * 100).toFixed(4) + '%' : 'N/A'}</td>
+            <td>${escapeHTML(op.pair)}</td>
+            <td>${escapeHTML(op.buyExchange)} ${escapeHTML(op.buyInstrument)} ${op.buyPrice !== undefined ? op.buyPrice.toFixed(op.pricePrecision) : 'N/A'}</td>
+            <td>${escapeHTML(op.sellExchange)} ${escapeHTML(op.sellInstrument)} ${op.sellPrice !== undefined ? op.sellPrice.toFixed(op.pricePrecision) : 'N/A'}</td>
+            <td class="${op.netSpreadPercentage > 0 ? 'positive' : 'negative'}">${op.netSpreadPercentage !== undefined ? op.netSpreadPercentage.toFixed(2) : 'N/A'}%</td>
+            <td class="${op.lucroS > 0 ? 'positive' : 'negative'}">${op.lucroS !== undefined ? op.lucroS.toFixed(2) : 'N/A'}%</td>
+            <td>${op.buyVolumeUSD !== undefined ? op.buyVolumeUSD.toFixed(0) : 'N/A'} / ${op.sellVolumeUSD !== undefined ? op.sellVolumeUSD.toFixed(0) : 'N/A'}</td>
+            <td class="${op.fundingRate > 0 ? 'positive' : 'negative'}">${op.fundingRate !== undefined ? op.fundingRate.toFixed(3) : 'N/A'}%</td>
             <td>
-                <button class="unblock-button" data-key="${blockedOp.key}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                        <path d="M7 11V7a5 5 0 0110 0v4"></path>
-                        <path d="M12 15v.01"></path>
-                    </svg>
-                </button>
+                <button class="unblock-button" data-key="${escapeHTML(blockedOp.key)}">Desbloquear</button>
             </td>
         `;
     });
-    addEventListenersToButtons();
 }
 
-function updateWatchedPairsTable() {
-    const watchedPairsTableBodyEl = document.getElementById('watched-pairs-table-body');
-    watchedPairsTableBodyEl.innerHTML = '';
-    watchedPairsCountEl.textContent = state.watchedPairsList.length;
-
-    if (state.watchedPairsList.length === 0) {
-        watchedPairsTableBodyEl.innerHTML = '<tr><td colspan="8" class="no-data">Nenhum par em vigilância.</td></tr>';
-        return;
-    }
-
-    state.watchedPairsList.forEach(pair => {
-        const op = state.arbitrageOpportunities.find(opWrapper => opWrapper.data.pair === pair)?.data;
-        if (!op) return; // Oportunidade não encontrada, talvez ainda não tenha chegado via WS
-
-        const row = watchedPairsTableBodyEl.insertRow();
-        row.classList.add('watched-pair-row');
-        row.dataset.pair = op.pair;
-
-        const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-
-        row.innerHTML = `
-            <td>
-                <button class="remove-watch-pair-button" data-pair="${op.pair}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-                ${op.pair}
-            </td>
-            <td>${op.buyExchange} ${op.buyInstrument} ${op.buyPrice}</td>
-            <td>${op.sellExchange} ${op.sellInstrument} ${op.sellPrice}</td>
-            <td class="${op.netSpreadPercentage > 0 ? 'positive' : 'negative'}">${op.netSpreadPercentage.toFixed(4)}%</td>
-            <td class="${lucroS > 0 ? 'positive' : 'negative'}">${lucroS.toFixed(4)}%</td>
-            <td>${formatVolume(op.volume)} / ${formatVolume(op.volumeFutures)}</td>
-            <td>${op.fundingRate !== null ? (op.fundingRate * 100).toFixed(4) + '%' : 'N/A'}</td>
-            <td>${formatTimeAgo(op.firstSeen)}</td>
-        `;
-    });
-    addEventListenersToButtons();
-}
-
-function updateMonitorParesTable() {
+function updatePairsTable() {
     pairsTableBodyEl.innerHTML = '';
-    pairCountMonitorEl.textContent = state.allPairsData.length;
-
     if (state.allPairsData.length === 0) {
-        pairsTableBodyEl.innerHTML = '<tr><td colspan="8" class="no-data">Aguardando dados dos pares...</td></tr>';
+        pairsTableBodyEl.innerHTML = '<tr><td colspan="8" class="no-data">Aguardando dados dos pares... (Clique no cabeçalho acima para expandir)</td></tr>';
         return;
     }
+
+    pairCountMonitorEl.textContent = state.allPairsData.length;
 
     state.allPairsData.forEach(pairData => {
         const row = pairsTableBodyEl.insertRow();
         row.innerHTML = `
-            <td>${pairData.exchange}</td>
-            <td>${pairData.pair}</td>
-            <td>${pairData.spotAsk}</td>
-            <td>${pairData.futuresAsk}</td>
-            <td>${pairData.spotBid}</td>
-            <td>${pairData.futuresBid}</td>
-            <td>${pairData.timestampSpot}</td>
-            <td>${pairData.timestampFutures}</td>
+            <td>${escapeHTML(pairData.exchange)}</td>
+            <td>${escapeHTML(pairData.pair)}</td>
+            <td>${pairData.spotAsk !== undefined ? pairData.spotAsk.toFixed(pairData.pricePrecision) : 'N/A'}</td>
+            <td>${pairData.futuresAsk !== undefined ? pairData.futuresAsk.toFixed(pairData.pricePrecision) : 'N/A'}</td>
+            <td>${pairData.spotBid !== undefined ? pairData.spotBid.toFixed(pairData.pricePrecision) : 'N/A'}</td>
+            <td>${pairData.futuresBid !== undefined ? pairData.futuresBid.toFixed(pairData.pricePrecision) : 'N/A'}</td>
+            <td>${pairData.spotTimestamp ? formatTime(pairData.spotTimestamp) : 'N/A'}</td>
+            <td>${pairData.futuresTimestamp ? formatTime(pairData.futuresTimestamp) : 'N/A'}</td>
         `;
     });
 }
 
-function updateLastUpdatedDisplay() {
-  if (state.lastUpdated) {
-    const now = new Date();
-    const diffMs = now.getTime() - state.lastUpdated.getTime();
-    const seconds = Math.floor(diffMs / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-
-    let timeAgo = '';
-    if (hours > 0) {
-      timeAgo = `${hours}h atrás`;
-    } else if (minutes > 0) {
-      timeAgo = `${minutes}m atrás`;
-    } else {
-      timeAgo = `${seconds}s atrás`;
-    }
-    elements.lastUpdated.textContent = `Última atualização: ${timeAgo}`;
-  } else {
-    elements.lastUpdated.textContent = 'Última atualização: --:--:--';
-  }
-}
-
-function updateFeeDisplay() {
-    if (elements.mexcSpotFee) elements.mexcSpotFee.textContent = (state.config.exchanges.mexc.spotMakerFee * 100).toFixed(3);
-    if (elements.mexcFuturesFee) elements.mexcFuturesFee.textContent = (state.config.exchanges.mexc.futuresMakerFee * 100).toFixed(3);
-    if (elements.gateioSpotFee) elements.gateioSpotFee.textContent = (state.config.exchanges.gateio.spotMakerFee * 100).toFixed(3);
-    if (elements.gateioFuturesFee) elements.gateioFuturesFee.textContent = (state.config.exchanges.gateio.futuresMakerFee * 100).toFixed(3);
-}
-
-function formatVolume(volume) {
-    if (volume >= 1000000) {
-        return (volume / 1000000).toFixed(1) + 'M';
-    } else if (volume >= 1000) {
-        return (volume / 1000).toFixed(0) + 'K';
-    } else {
-        return volume.toFixed(0);
+function requestUiUpdate() {
+    if (!uiUpdateScheduled) {
+        uiUpdateScheduled = true;
+        setTimeout(() => {
+            updateOpportunitiesTable();
+            updateBlockedOpportunitiesTable();
+            updatePairsTable();
+            uiUpdateScheduled = false;
+        }, UI_UPDATE_INTERVAL_MS);
     }
 }
 
-function formatTimeAgo(timestamp) {
-    const now = Date.now();
-    const seconds = Math.floor((now - timestamp) / 1000);
-
-    if (seconds < 60) {
-        return `${seconds}s`;
-    } else if (seconds < 3600) {
-        return `${Math.floor(seconds / 60)}m`;
-    } else if (seconds < 86400) {
-        return `${Math.floor(seconds / 3600)}h`;
-    } else {
-        return `${Math.floor(seconds / 86400)}d`;
-    }
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
 }
 
-// --- EVENT LISTENERS ---
-document.addEventListener('DOMContentLoaded', () => {
-  // Carrega o tema salvo
-  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-  if (savedTheme === 'dark') {
-    document.body.classList.add('dark');
-    elements.sunIcon.style.display = 'none';
-    elements.moonIcon.style.display = 'block';
-  } else {
-    document.body.classList.remove('dark');
-    elements.sunIcon.style.display = 'block';
-    elements.moonIcon.style.display = 'none';
-  }
+function updateConnectionStatus() {
+    if (state.connected) {
+        elements.connectionDot.classList.remove('disconnected');
+        elements.connectionDot.classList.add('connected');
+        elements.connectionText.textContent = 'Conectado';
+    } else {
+        elements.connectionDot.classList.remove('connected');
+        elements.connectionDot.classList.add('disconnected');
+        elements.connectionText.textContent = 'Desconectado';
+    }
+    elements.lastUpdated.textContent = state.lastUpdated ? `Última atualização: ${formatTime(state.lastUpdated)}` : 'Última atualização: --:--:--';
+}
 
-  // Carrega o capital padrão salvo
-  const savedCapital = localStorage.getItem(DEFAULT_CAPITAL_STORAGE_KEY);
-  if (savedCapital) {
-    state.defaultCapitalUSD = parseFloat(savedCapital);
-    defaultCapitalInputEl.value = state.defaultCapitalUSD;
-  }
+function connectWebSocket() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return; // Já conectado ou conectando
+    }
 
-  // Carrega os pares favoritos e bloqueados
-  state.favoritedOps = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY) || '[]');
-  state.blockedOps = JSON.parse(localStorage.getItem(BLOCKED_STORAGE_KEY) || '[]');
-  state.hiddenWatchedOps = new Set(JSON.parse(localStorage.getItem(HIDDEN_WATCHED_OPS_STORAGE_KEY) || '[]'));
+    // Tenta usar wss:// se a página for HTTPS, caso contrário, ws://
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    ws = new WebSocket(`${protocol}${window.location.host}`);
 
-  // Carrega o estado de expansão dos painéis
-  state.isWatchedPairsExpanded = JSON.parse(localStorage.getItem(WATCHED_PAIRS_EXPANDED_KEY) || 'false');
-  if (state.isWatchedPairsExpanded) {
-    watchedPairsTableContainerEl.style.display = '';
-    watchedPairsToggleIconEl.innerHTML = ICON_EXPANDED;
-  } else {
-    watchedPairsTableContainerEl.style.display = 'none';
-    watchedPairsToggleIconEl.innerHTML = ICON_COLLAPSED;
-  }
+    ws.onopen = () => {
+        console.log('WebSocket conectado');
+        state.connected = true;
+        updateConnectionStatus();
+        // Enviar mensagem de autenticação ou inicialização se necessário
+    };
 
-  state.isMonitorParesExpanded = JSON.parse(localStorage.getItem(MONITOR_PARES_EXPANDED_KEY) || 'false');
-  if (state.isMonitorParesExpanded) {
-    monitorParesTableContainerEl.style.display = '';
-    monitorParesToggleIconEl.innerHTML = ICON_EXPANDED;
-  } else {
-    monitorParesTableContainerEl.style.display = 'none';
-    monitorParesToggleIconEl.innerHTML = ICON_COLLAPSED;
-  }
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'opportunities') {
+            state.arbitrageOpportunities = data.opportunities;
+            state.allPairsData = data.allPairsData;
+            state.lastUpdated = Date.now();
+            requestUiUpdate();
+        } else if (data.type === 'config') {
+            // Atualizar taxas de corretagem e minProfit
+            if (data.config.exchanges) {
+                Object.assign(state.config.exchanges, data.config.exchanges);
+                elements.mexcSpotFee.textContent = (state.config.exchanges.mexc.spotMakerFee * 100).toFixed(2);
+                elements.mexcFuturesFee.textContent = (state.config.exchanges.mexc.futuresMakerFee * 100).toFixed(2);
+                elements.gateioSpotFee.textContent = (state.config.exchanges.gateio.spotMakerFee * 100).toFixed(2);
+                elements.gateioFuturesFee.textContent = (state.config.exchanges.gateio.futuresMakerFee * 100).toFixed(2);
+            }
+            if (data.config.arbitrage && data.config.arbitrage.minProfitPercentage !== undefined) {
+                elements.minProfit.textContent = data.config.arbitrage.minProfitPercentage.toFixed(1);
+            }
+        }
+    };
 
-  // Event Listeners para os filtros
-  Object.values(filterCheckboxes).forEach(checkbox => {
-    checkbox.addEventListener('change', requestUiUpdate);
-  });
-  filterMinVolumeInput.addEventListener('input', (e) => {
-    state.filters.minVolume = parseFloat(e.target.value) || 0;
-    requestUiUpdate();
-  });
-  filterMinProfitEDisplayEl.addEventListener('change', (e) => {
-    state.filters.minProfitEFilterDisplay = parseFloat(e.target.value);
-    requestUiUpdate();
-  });
-  filterMinProfitSDisplayEl.addEventListener('change', (e) => {
-    state.filters.minProfitSFilterDisplay = parseFloat(e.target.value);
-    requestUiUpdate();
-  });
-  filterEnableFutFutEl.addEventListener('change', (e) => {
-    state.config.arbitrage.enableFuturesVsFutures = e.target.checked;
-    requestUiUpdate();
-  });
-  filterEnableSpotSpotEl.addEventListener('change', (e) => {
-    state.config.arbitrage.enableSpotVsSpot = e.target.checked;
-    requestUiUpdate();
-  });
-  filterFundingMinInput.addEventListener('input', (e) => {
-    state.filters.minFundingRate = e.target.value === '' ? null : parseFloat(e.target.value);
-    requestUiUpdate();
-  });
-  filterFundingMaxInput.addEventListener('input', (e) => {
-    state.filters.maxFundingRate = e.target.value === '' ? null : parseFloat(e.target.value);
-    requestUiUpdate();
-  });
+    ws.onclose = (event) => {
+        console.log('WebSocket desconectado:', event.code, event.reason);
+        state.connected = false;
+        updateConnectionStatus();
+        // Tentar reconectar após um atraso
+        setTimeout(connectWebSocket, 3000); // Tenta reconectar após 3 segundos
+    };
 
-  // Event Listeners para os botões de navegação
-  elements.navArbitragens.addEventListener('click', () => setCurrentView('arbitragens'));
-  elements.navSaidaOp.addEventListener('click', () => setCurrentView('saida-op'));
-  elements.navAmbosPositivos.addEventListener('click', () => setCurrentView('ambos-positivos'));
+    ws.onerror = (error) => {
+        console.error('WebSocket erro:', error);
+        ws.close(); // Força o fechamento para tentar reconectar
+    };
+}
 
-  // Event Listener para o botão de logout
-  document.getElementById('logout-button').addEventListener('click', async () => {
+// --- Funções de Restrição de Assinatura ---
+async function fetchUserData() {
     try {
-      const response = await fetch('/api/users/logout', { method: 'POST' });
-      if (response.ok) {
-        window.location.href = '/login.html';
-      } else {
-        console.error('Erro ao fazer logout');
-        alert('Erro ao fazer logout. Tente novamente.');
-      }
+        const response = await fetch('/api/users/me');
+        if (response.ok) {
+            const data = await response.json();
+            state.currentUserSubscriptionStatus = data.user.subscriptionStatus;
+            console.log('Status de assinatura do usuário:', state.currentUserSubscriptionStatus);
+        } else if (response.status === 401) {
+            // Não autenticado, redirecionar para login ou tratar como free
+            console.warn('Usuário não autenticado. Redirecionando para login...');
+            window.location.href = '/login.html'; // Redireciona para a página de login
+            state.currentUserSubscriptionStatus = 'free'; // Fallback para free se não autenticado
+        } else {
+            console.error('Erro ao buscar dados do usuário:', response.status, response.statusText);
+            state.currentUserSubscriptionStatus = 'free'; // Fallback para free em caso de erro
+        }
     } catch (error) {
-      console.error('Erro de conexão ao fazer logout:', error);
-      alert('Erro de conexão. Tente novamente.');
-    }
-  });
-
-  // Event Listener para o input de capital padrão
-  defaultCapitalInputEl.addEventListener('input', (e) => {
-    state.defaultCapitalUSD = parseFloat(e.target.value) || 0;
-    localStorage.setItem(DEFAULT_CAPITAL_STORAGE_KEY, state.defaultCapitalUSD);
-    requestUiUpdate();
-  });
-
-  // Event Listener para o botão de alternar som
-  elements.toggleSoundButton.addEventListener('click', () => {
-    state.soundEnabled = !state.soundEnabled;
-    if (state.soundEnabled) {
-      elements.soundOnIcon.style.display = 'block';
-      elements.soundOffIcon.style.display = 'none';
-      // Solicita permissão de áudio se ainda não foi concedida
-      if (!state.soundPermissionGranted) {
-        // Tenta tocar um som silencioso para obter permissão
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        gainNode.gain.value = 0; // Volume zero
-        oscillator.start(0);
-        oscillator.stop(audioContext.currentTime + 0.1); // Toca por 0.1 segundos
-        state.soundPermissionGranted = true;
-      }
-    } else {
-      elements.soundOnIcon.style.display = 'none';
-      elements.soundOffIcon.style.display = 'block';
-    }
-  });
-
-  // Event Listener para o input de limite de lucro para som
-  soundProfitThresholdInputEl.addEventListener('input', (e) => {
-    state.soundProfitThreshold = parseFloat(e.target.value) || 0.0;
-  });
-
-  // Event Listener para o botão de alternar tema
-  elements.themeToggleButton.addEventListener('click', () => {
-    state.isDarkTheme = !state.isDarkTheme;
-    if (state.isDarkTheme) {
-      document.body.classList.add('dark');
-      elements.sunIcon.style.display = 'none';
-      elements.moonIcon.style.display = 'block';
-      localStorage.setItem(THEME_STORAGE_KEY, 'dark');
-    } else {
-      document.body.classList.remove('dark');
-      elements.sunIcon.style.display = 'block';
-      elements.moonIcon.style.display = 'none';
-      localStorage.setItem(THEME_STORAGE_KEY, 'light');
-    }
-  });
-
-  // Event Listener para o botão de pausar/continuar
-  elements.togglePauseButton.addEventListener('click', () => {
-    state.isPaused = !state.isPaused;
-    if (state.isPaused) {
-      elements.pauseIcon.style.display = 'block';
-      elements.playIcon.style.display = 'none';
-      if (ws) ws.close(); // Fecha o WebSocket para pausar a atualização de dados
-    } else {
-      elements.pauseIcon.style.display = 'none';
-      elements.playIcon.style.display = 'block';
-      connectWebSocket(); // Reconecta o WebSocket para continuar a atualização
-    }
-  });
-
-  // Event Listener para o botão de alternar oportunidades bloqueadas
-  elements.toggleBlockedOps.addEventListener('click', toggleBlockedOps);
-
-  // Event Listener para o botão de adicionar par em vigilância
-  addWatchPairButtonEl.addEventListener('click', () => {
-    const pair = watchPairInputEl.value.trim().toUpperCase();
-    if (pair && !state.watchedPairsList.includes(pair)) {
-      state.watchedPairsList.push(pair);
-      localStorage.setItem('arbitrageDashboard_watchedPairs_v1', JSON.stringify(state.watchedPairsList));
-      watchPairInputEl.value = '';
-      requestUiUpdate();
-    }
-  });
-
-  // Event Listener para expandir/colapsar Pares em Vigilância
-  watchedPairsHeaderEl.addEventListener('click', () => {
-    state.isWatchedPairsExpanded = !state.isWatchedPairsExpanded;
-    localStorage.setItem(WATCHED_PAIRS_EXPANDED_KEY, JSON.stringify(state.isWatchedPairsExpanded));
-    if (state.isWatchedPairsExpanded) {
-      watchedPairsTableContainerEl.style.display = '';
-      watchedPairsToggleIconEl.innerHTML = ICON_EXPANDED;
-    } else {
-      watchedPairsTableContainerEl.style.display = 'none';
-      watchedPairsToggleIconEl.innerHTML = ICON_COLLAPSED;
-    }
-  });
-
-  // Event Listener para expandir/colapsar Monitor de Pares
-  monitorParesHeaderEl.addEventListener('click', () => {
-    state.isMonitorParesExpanded = !state.isMonitorParesExpanded;
-    localStorage.setItem(MONITOR_PARES_EXPANDED_KEY, JSON.stringify(state.isMonitorParesExpanded));
-    if (state.isMonitorParesExpanded) {
-      monitorParesTableContainerEl.style.display = '';
-      monitorParesToggleIconEl.innerHTML = ICON_EXPANDED;
-    } else {
-      monitorParesTableContainerEl.style.display = 'none';
-      monitorParesToggleIconEl.innerHTML = ICON_COLLAPSED;
-    }
-  });
-
-  // Inicializa a conexão WebSocket
-  connectWebSocket();
-
-  // --- LÓGICA DE ASSINATURA (NOVO) ---
-  async function fetchUserData() {
-    try {
-      const response = await fetch('/api/users/me');
-      if (response.ok) {
-        const data = await response.json();
-        state.currentUserSubscriptionStatus = data.user.subscriptionStatus; // Assume que a API retorna { user: { subscriptionStatus: '...' } }
+        console.error('Erro de rede ao buscar dados do usuário:', error);
+        state.currentUserSubscriptionStatus = 'free'; // Fallback para free em caso de erro de rede
+    } finally {
         applySubscriptionRestrictions();
-      } else if (response.status === 401) {
-        // Usuário não autenticado, redireciona para o login
-        window.location.href = '/login.html';
-      } else {
-        console.error('Erro ao buscar dados do usuário:', response.statusText);
-        // Mantém o status como null ou um padrão seguro
-        state.currentUserSubscriptionStatus = 'free'; // Assume free em caso de erro para não bloquear tudo
-        applySubscriptionRestrictions();
-      }
-    } catch (error) {
-      console.error('Erro de conexão ao buscar dados do usuário:', error);
-      // Em caso de erro de rede, assume free para não bloquear o acesso
-      state.currentUserSubscriptionStatus = 'free';
-      applySubscriptionRestrictions();
     }
-  }
+}
 
-  function showUpgradeAlert() {
-    const upgradeMessageEl = document.getElementById('upgrade-message');
-    const testVersionBannerEl = document.getElementById('test-version-banner');
-
-    if (upgradeMessageEl) {
-      upgradeMessageEl.innerHTML = `
-        <div class="alert-banner premium-alert">
-          <p>Você está usando a versão gratuita. Faça upgrade para o plano Premium para desbloquear todas as funcionalidades!</p>
-          <button class="banner-upgrade-button" onclick="window.location.href='http://arbflash.com/'">Assinar Premium</button>
-        </div>
-      `;
-      upgradeMessageEl.style.display = 'block';
-    }
-
-    if (testVersionBannerEl) {
-      testVersionBannerEl.style.display = 'flex'; // Exibe o banner de teste
-      testVersionBannerEl.querySelector('.banner-upgrade-button').onclick = () => {
-        window.location.href = 'http://arbflash.com/';
-      };
-      testVersionBannerEl.querySelector('.banner-close').onclick = () => {
-        testVersionBannerEl.style.display = 'none';
-      };
-    }
-  }
-
-  function applySubscriptionRestrictions() {
+function applySubscriptionRestrictions() {
     const isFreeUser = state.currentUserSubscriptionStatus === 'free';
 
-    // 1. Exibir/Esconder o banner de upgrade
-    if (isFreeUser) {
-      showUpgradeAlert();
-    } else {
-      document.getElementById('upgrade-message').style.display = 'none';
-      document.getElementById('test-version-banner').style.display = 'none';
+    // 1. Banner de Upgrade
+    const upgradeBanner = document.getElementById('test-version-banner');
+    if (upgradeBanner) {
+        upgradeBanner.style.display = isFreeUser ? 'flex' : 'none';
     }
 
-    // 2. Bloquear navegação para Saída OP e Ambos Positivos (visual)
+    // 2. Navegação (Saída OP, Ambos Positivos)
     const navSaidaOp = document.getElementById('nav-saida-op');
     const navAmbosPositivos = document.getElementById('nav-ambos-positivos');
 
     if (navSaidaOp) {
-      if (isFreeUser) {
-        navSaidaOp.classList.add('locked-feature');
-        navSaidaOp.title = 'Funcionalidade Premium';
-        navSaidaOp.querySelector('.nav-item-text').innerHTML += ' <span class="lock-icon">🔒</span>';
-      } else {
-        navSaidaOp.classList.remove('locked-feature');
-        navSaidaOp.title = '';
-        // Remover o ícone de cadeado se existir
-        const lockIcon = navSaidaOp.querySelector('.lock-icon');
-        if (lockIcon) lockIcon.remove();
-      }
-    }
-
-    if (navAmbosPositivos) {
-      if (isFreeUser) {
-        navAmbosPositivos.classList.add('locked-feature');
-        navAmbosPositivos.title = 'Funcionalidade Premium';
-        navAmbosPositivos.querySelector('.nav-item-text').innerHTML += ' <span class="lock-icon">🔒</span>';
-      } else {
-        navAmbosPositivos.classList.remove('locked-feature');
-        navAmbosPositivos.title = '';
-        const lockIcon = navAmbosPositivos.querySelector('.lock-icon');
-        if (lockIcon) lockIcon.remove();
-      }
-    }
-
-    // 3. Bloquear filtros avançados (Futuros vs Futuros, Spot vs Spot, Volume Mín, Financ.)
-    const premiumFilters = [
-      filterEnableFutFutEl.closest('.filter-group'),
-      filterEnableSpotSpotEl.closest('.filter-group'),
-      filterMinVolumeInput.closest('.filter-group'),
-      filterFundingMinInput.closest('.filter-group')
-    ];
-
-    premiumFilters.forEach(group => {
-      if (group) {
         if (isFreeUser) {
-          group.classList.add('locked-feature');
-          group.title = 'Funcionalidade Premium';
-          // Adicionar ícone de cadeado ao lado do label ou input
-          const label = group.querySelector('label') || group.querySelector('strong');
-          if (label && !label.querySelector('.lock-icon')) {
-            label.innerHTML += ' <span class="lock-icon">🔒</span>';
-          }
-          // Desabilitar inputs/checkboxes
-          group.querySelectorAll('input, select').forEach(input => input.disabled = true);
+            navSaidaOp.classList.add('locked-feature');
+            navSaidaOp.querySelector('.nav-item-text').innerHTML = `Saída OP <span class="lock-icon">🔒</span>`;
         } else {
-          group.classList.remove('locked-feature');
-          group.title = '';
-          const lockIcon = group.querySelector('.lock-icon');
-          if (lockIcon) lockIcon.remove();
-          group.querySelectorAll('input, select').forEach(input => input.disabled = false);
+            navSaidaOp.classList.remove('locked-feature');
+            navSaidaOp.querySelector('.nav-item-text').innerHTML = `Saída OP`;
         }
-      }
-    });
-
-    // 4. Ajustar o filtro de lucro de entrada para free (max 1%)
-    const filterMinProfitEDisplayOptions = filterMinProfitEDisplayEl.options;
-    for (let i = 0; i < filterMinProfitEDisplayOptions.length; i++) {
-      const option = filterMinProfitEDisplayOptions[i];
-      const value = parseFloat(option.value);
-      if (isFreeUser) {
-        if (value > 1.0) {
-          option.disabled = true;
-          option.classList.add('premium-option');
-        } else {
-          option.disabled = false;
-          option.classList.remove('premium-option');
-        }
-      } else {
-        option.disabled = false;
-        option.classList.remove('premium-option');
-      }
     }
-    // Se o usuário free estiver com uma opção > 1% selecionada, resetar para 1%
-    if (isFreeUser && parseFloat(filterMinProfitEDisplayEl.value) > 1.0) {
-      filterMinProfitEDisplayEl.value = '1.0';
-      state.filters.minProfitEFilterDisplay = 1.0;
-      requestUiUpdate();
+    if (navAmbosPositivos) {
+        if (isFreeUser) {
+            navAmbosPositivos.classList.add('locked-feature');
+            navAmbosPositivos.querySelector('.nav-item-text').innerHTML = `Ambos Positivos <span class="lock-icon">🔒</span>`;
+        } else {
+            navAmbosPositivos.classList.remove('locked-feature');
+            navAmbosPositivos.querySelector('.nav-item-text').innerHTML = `Ambos Positivos`;
+        }
     }
 
-    // 5. Ocultar oportunidades premium na tabela principal para usuários free (visual)
-    document.querySelectorAll('.opportunity-row.premium-feature-row').forEach(row => {
-      if (isFreeUser) {
-        row.style.display = 'none';
-      } else {
-        row.style.display = '';
-      }
-    });
-  }
-
-  // Chama fetchUserData no carregamento da página
-  fetchUserData();
-});
-
-// --- FUNÇÕES DE UTILIDADE (EXISTENTES) ---
-function addEventListenersToButtons() {
-  document.querySelectorAll('.favorite-button').forEach(button => {
-    button.onclick = (e) => {
-      e.stopPropagation();
-      const pair = button.dataset.pair;
-      const direction = button.dataset.direction;
-      const key = `${pair}-${direction}`;
-      const index = state.favoritedOps.indexOf(key);
-      if (index > -1) {
-        state.favoritedOps.splice(index, 1);
-        button.classList.remove('favorited');
-        button.querySelector('svg').setAttribute('fill', 'none');
-      } else {
-        state.favoritedOps.push(key);
-        button.classList.add('favorited');
-        button.querySelector('svg').setAttribute('fill', 'gold');
-      }
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(state.favoritedOps));
-      requestUiUpdate();
-    };
-  });
-
-  document.querySelectorAll('.block-button').forEach(button => {
-    button.onclick = (e) => {
-      e.stopPropagation();
-      const pair = button.dataset.pair;
-      const direction = button.dataset.direction;
-      const key = `${pair}-${direction}`;
-      const opToBlock = state.arbitrageOpportunities.find(opWrapper => `${opWrapper.data.pair}-${opWrapper.data.direction}` === key)?.data;
-
-      if (opToBlock) {
-        const isBlocked = state.blockedOps.some(blockedOp => blockedOp.key === key);
-        if (isBlocked) {
-          state.blockedOps = state.blockedOps.filter(blockedOp => blockedOp.key !== key);
-          button.classList.remove('blocked');
-          button.querySelector('svg').setAttribute('fill', 'none');
+    // 3. Filtros Premium
+    const premiumFilterGroups = document.querySelectorAll('.filter-group.premium-feature');
+    premiumFilterGroups.forEach(group => {
+        if (isFreeUser) {
+            group.classList.add('locked-feature');
+            group.querySelectorAll('input, select, button').forEach(el => el.disabled = true);
         } else {
-          state.blockedOps.push({ ...opToBlock, key: key });
-          button.classList.add('blocked');
-          button.querySelector('svg').setAttribute('fill', 'red');
+            group.classList.remove('locked-feature');
+            group.querySelectorAll('input, select, button').forEach(el => el.disabled = false);
         }
-        localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(state.blockedOps));
-        requestUiUpdate();
-      }
-    };
-  });
+    });
 
-  document.querySelectorAll('.unblock-button').forEach(button => {
-    button.onclick = (e) => {
-      e.stopPropagation();
-      const key = button.dataset.key;
-      state.blockedOps = state.blockedOps.filter(blockedOp => blockedOp.key !== key);
-      localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(state.blockedOps));
-      requestUiUpdate();
-    };
-  });
+    // 4. Limitar opções de lucro de entrada para free
+    const filterMinProfitEDisplaySelect = document.getElementById('filter-min-profit-e-display');
+    if (filterMinProfitEDisplaySelect) {
+        Array.from(filterMinProfitEDisplaySelect.options).forEach(option => {
+            const value = parseFloat(option.value);
+            if (isFreeUser && value >= 1.0) {
+                option.disabled = true;
+                option.classList.add('premium-option');
+            } else {
+                option.disabled = false;
+                option.classList.remove('premium-option');
+            }
+        });
+        // Se o usuário free estiver com uma opção premium selecionada, resetar para 0
+        if (isFreeUser && parseFloat(filterMinProfitEDisplaySelect.value) >= 1.0) {
+            filterMinProfitEDisplaySelect.value = '0';
+            state.filters.minProfitEFilterDisplay = 0;
+        }
+    }
 
-  document.querySelectorAll('.calculator-button').forEach(button => {
-    button.onclick = (e) => {
-      e.stopPropagation();
-      const pair = button.dataset.pair;
-      const direction = button.dataset.direction;
-      const buyEx = button.dataset.buyEx;
-      const sellEx = button.dataset.sellEx;
-      const opDataForCopyStr = button.dataset.opData; // Dados da oportunidade em string JSON
-      abrirGraficosComLayout(buyEx, null, sellEx, null, pair, direction, opDataForCopyStr);
-    };
-  });
+    // 5. Esconder oportunidades Futuros vs Futuros e Spot vs Spot para free
+    // Isso já é tratado na função getFilteredOpportunities, mas garantimos que os checkboxes estejam desmarcados
+    if (isFreeUser) {
+        filterEnableFutFutEl.checked = false;
+        filterEnableSpotSpotEl.checked = false;
+        state.config.arbitrage.enableFuturesVsFutures = false;
+        state.config.arbitrage.enableSpotVsSpot = false;
+    }
 
-  document.querySelectorAll('.remove-watch-pair-button').forEach(button => {
-    button.onclick = (e) => {
-      e.stopPropagation();
-      const pairToRemove = button.dataset.pair;
-      state.watchedPairsList = state.watchedPairsList.filter(p => p !== pairToRemove);
-      localStorage.setItem('arbitrageDashboard_watchedPairs_v1', JSON.stringify(state.watchedPairsList));
-      requestUiUpdate();
-    };
-  });
+    requestUiUpdate(); // Força uma atualização da UI para aplicar as restrições
 }
 
-// --- FUNÇÕES DE INICIALIZAÇÃO ---
-// Esta função é chamada no final do DOMContentLoaded
-// para garantir que todos os elementos estejam disponíveis.
+function showUpgradeAlert() {
+    const upgradeMessageEl = document.getElementById('upgrade-message');
+    if (upgradeMessageEl) {
+        upgradeMessageEl.innerHTML = `
+            <div class="alert-banner premium-alert">
+                <div class="banner-content">
+                    <span class="banner-icon">🔒</span>
+                    <span class="banner-text">Funcionalidade Premium. Faça upgrade para desbloquear!</span>
+                </div>
+                <button class="banner-upgrade-button">Adquirir Premium</button>
+                <button class="banner-close">×</button>
+            </div>
+        `;
+        upgradeMessageEl.style.display = 'block';
+
+        // Adicionar event listener para fechar o banner
+        const closeButton = upgradeMessageEl.querySelector('.banner-close');
+        if (closeButton) {
+            closeButton.onclick = () => {
+                upgradeMessageEl.style.display = 'none';
+            };
+        }
+        // Adicionar event listener para o botão de upgrade
+        const upgradeButton = upgradeMessageEl.querySelector('.banner-upgrade-button');
+        if (upgradeButton) {
+            upgradeButton.onclick = () => {
+                // Redirecionar para a página de upgrade
+                window.location.href = '/upgrade.html'; // Altere para a URL correta da sua página de upgrade
+            };
+        }
+    }
+}
+
+// --- Event Listeners ---
+document.addEventListener('DOMContentLoaded', () => {
+    loadStateFromLocalStorage();
+    updateConnectionStatus();
+    connectWebSocket();
+    fetchUserData(); // Busca o status de assinatura do usuário
+
+    // Inicializa o estado do sidebar
+    elements.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
+
+    // Inicializa o tema
+    if (state.isDarkTheme) {
+        document.body.classList.add('dark-theme');
+        elements.sunIcon.style.display = 'none';
+        elements.moonIcon.style.display = 'block';
+        elements.themeToggleButton.querySelector('.control-button-text').textContent = 'Escuro';
+    } else {
+        document.body.classList.remove('dark-theme');
+        elements.sunIcon.style.display = 'block';
+        elements.moonIcon.style.display = 'none';
+        elements.themeToggleButton.querySelector('.control-button-text').textContent = 'Claro';
+    }
+
+    // Inicializa o estado de pausa
+    if (state.isPaused) {
+        elements.pauseIcon.style.display = 'block';
+        elements.playIcon.style.display = 'none';
+        elements.togglePauseButton.querySelector('.control-button-text').textContent = 'Retomar';
+    } else {
+        elements.pauseIcon.style.display = 'none';
+        elements.playIcon.style.display = 'block';
+        elements.togglePauseButton.querySelector('.control-button-text').textContent = 'Pausar';
+    }
+
+    // Inicializa o estado do som
+    if (state.soundEnabled) {
+        elements.soundOnIcon.style.display = 'block';
+        elements.soundOffIcon.style.display = 'none';
+        elements.toggleSoundButton.querySelector('.control-button-text').textContent = 'Som ON';
+    } else {
+        elements.soundOnIcon.style.display = 'none';
+        elements.soundOffIcon.style.display = 'block';
+        elements.toggleSoundButton.querySelector('.control-button-text').textContent = 'Som OFF';
+    }
+
+    // Inicializa o estado de exibição de oportunidades bloqueadas
+    const blockedTableContainer = document.getElementById('blocked-ops-table-container');
+    const text = elements.toggleBlockedOps?.querySelector('span');
+    if (state.showBlockedOps) {
+        elements.eyeIcon.style.display = 'block';
+        elements.eyeOffIcon.style.display = 'none';
+        text.textContent = 'Esconder Oportunidades Bloqueadas';
+        blockedTableContainer.style.display = '';
+    } else {
+        elements.eyeIcon.style.display = 'none';
+        elements.eyeOffIcon.style.display = 'block';
+        text.textContent = 'Mostrar Oportunidades Bloqueadas';
+        blockedTableContainer.style.display = 'none';
+    }
+
+    // Inicializa o estado dos filtros
+    filterCheckboxes.mexcSpot.checked = state.filters.mexcSpot;
+    filterCheckboxes.mexcFutures.checked = state.filters.mexcFutures;
+    filterCheckboxes.gateioSpot.checked = state.filters.gateioSpot;
+    filterCheckboxes.gateioFutures.checked = state.filters.gateioFutures;
+    filterMinVolumeInput.value = state.filters.minVolume;
+    filterMinProfitEDisplayEl.value = state.filters.minProfitEFilterDisplay;
+    filterMinProfitSDisplayEl.value = state.filters.minProfitSFilterDisplay;
+    filterEnableFutFutEl.checked = state.config.arbitrage.enableFuturesVsFutures;
+    filterEnableSpotSpotEl.checked = state.config.arbitrage.enableSpotVsSpot;
+    soundProfitThresholdInputEl.value = state.soundProfitThreshold;
+    defaultCapitalInputEl.value = state.defaultCapitalUSD;
+    filterFundingMinInput.value = state.filters.minFundingRate !== null ? state.filters.minFundingRate : '';
+    filterFundingMaxInput.value = state.filters.maxFundingRate !== null ? state.filters.maxFundingRate : '';
+
+    // Inicializa o estado de expansão das seções
+    watchedPairsTableContainerEl.style.display = state.isWatchedPairsExpanded ? '' : 'none';
+    watchedPairsToggleIconEl.innerHTML = state.isWatchedPairsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+    monitorParesTableContainerEl.style.display = state.isMonitorParesExpanded ? '' : 'none';
+    monitorParesToggleIconEl.innerHTML = state.isMonitorParesExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+
+    // Define a view inicial
+    setCurrentView(state.currentView);
+    updateMainTitle();
+    requestUiUpdate();
+});
+
+elements.sidebarToggle.addEventListener('click', toggleSidebar);
+elements.navArbitragens.addEventListener('click', () => setCurrentView('arbitragens'));
+elements.navSaidaOp.addEventListener('click', () => setCurrentView('saida-op'));
+elements.navAmbosPositivos.addEventListener('click', () => setCurrentView('ambos-positivos'));
+elements.toggleBlockedOps.addEventListener('click', toggleBlockedOps);
+elements.toggleSoundButton.addEventListener('click', toggleSound);
+elements.themeToggleButton.addEventListener('click', toggleTheme);
+elements.togglePauseButton.addEventListener('click', togglePause);
+elements.logoutButton.addEventListener('click', () => {
+    localStorage.removeItem('token'); // Remove o token JWT
+    window.location.href = '/login.html'; // Redireciona para a página de login
+});
+
+watchedPairsHeaderEl.addEventListener('click', () => {
+    state.isWatchedPairsExpanded = !state.isWatchedPairsExpanded;
+    watchedPairsTableContainerEl.style.display = state.isWatchedPairsExpanded ? '' : 'none';
+    watchedPairsToggleIconEl.innerHTML = state.isWatchedPairsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+    saveStateToLocalStorage();
+});
+
+monitorParesHeaderEl.addEventListener('click', () => {
+    state.isMonitorParesExpanded = !state.isMonitorParesExpanded;
+    monitorParesTableContainerEl.style.display = state.isMonitorParesExpanded ? '' : 'none';
+    monitorParesToggleIconEl.innerHTML = state.isMonitorParesExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+    saveStateToLocalStorage();
+});
+
+// --- Event Listeners para Filtros ---
+Object.values(filterCheckboxes).forEach(checkbox => {
+    checkbox.addEventListener('change', (event) => {
+        state.filters[event.target.dataset.filterkey] = event.target.checked;
+        saveStateToLocalStorage();
+        requestUiUpdate();
+    });
+});
+
+filterMinVolumeInput.addEventListener('input', (event) => {
+    state.filters.minVolume = parseFloat(event.target.value) || 0;
+    saveStateToLocalStorage();
+    requestUiUpdate();
+});
+
+filterMinProfitEDisplayEl.addEventListener('change', (event) => {
+    state.filters.minProfitEFilterDisplay = parseFloat(event.target.value);
+    saveStateToLocalStorage();
+    requestUiUpdate();
+});
+
+filterMinProfitSDisplayEl.addEventListener('change', (event) => {
+    state.filters.minProfitSFilterDisplay = parseFloat(event.target.value);
+    saveStateToLocalStorage();
+    requestUiUpdate();
+});
+
+filterEnableFutFutEl.addEventListener('change', (event) => {
+    state.config.arbitrage.enableFuturesVsFutures = event.target.checked;
+    saveStateToLocalStorage();
+    requestUiUpdate();
+});
+
+filterEnableSpotSpotEl.addEventListener('change', (event) => {
+    state.config.arbitrage.enableSpotVsSpot = event.target.checked;
+    saveStateToLocalStorage();
+    requestUiUpdate();
+});
+
+soundProfitThresholdInputEl.addEventListener('input', (event) => {
+    state.soundProfitThreshold = parseFloat(event.target.value) || 0;
+    saveStateToLocalStorage();
+});
+
+defaultCapitalInputEl.addEventListener('input', (event) => {
+    state.defaultCapitalUSD = parseFloat(event.target.value) || 0;
+    qtySugBaseUnitHeaderEl.textContent = `(${state.defaultCapitalUSD > 0 ? 'USD' : 'QTD'})`;
+    saveStateToLocalStorage();
+    requestUiUpdate();
+});
+
+filterFundingMinInput.addEventListener('input', (event) => {
+    state.filters.minFundingRate = event.target.value === '' ? null : parseFloat(event.target.value);
+    saveStateToLocalStorage();
+    requestUiUpdate();
+});
+
+filterFundingMaxInput.addEventListener('input', (event) => {
+    state.filters.maxFundingRate = event.target.value === '' ? null : parseFloat(event.target.value);
+    saveStateToLocalStorage();
+    requestUiUpdate();
+});
+
+// --- Watchlist ---
+addWatchPairButtonEl.addEventListener('click', () => {
+    const pair = watchPairInputEl.value.trim().toUpperCase();
+    if (pair && !state.watchedPairsList.includes(pair)) {
+        state.watchedPairsList.push(pair);
+        watchPairInputEl.value = '';
+        saveStateToLocalStorage();
+        requestUiUpdate();
+        updateWatchedPairsCount();
+    }
+});
+
+function updateWatchedPairsCount() {
+    watchedPairsCountEl.textContent = state.watchedPairsList.length;
+}
+
+// --- Event Listeners para botões dinâmicos (delegação) ---
+opportunitiesTableBodyEl.addEventListener('click', (event) => {
+    if (event.target.classList.contains('favorite-button')) {
+        const pair = event.target.dataset.pair;
+        toggleFavorite(pair);
+    } else if (event.target.classList.contains('pair-link')) {
+        event.preventDefault();
+        const pair = event.target.dataset.pair;
+        const direction = event.target.dataset.direction;
+        const buyEx = event.target.dataset.buyExchange;
+        const sellEx = event.target.dataset.sellExchange;
+        const buyInstrument = event.target.dataset.buyInstrument;
+        const sellInstrument = event.target.dataset.sellInstrument;
+        const opDataForCopyStr = event.target.dataset.opData;
+        abrirGraficosComLayout(buyEx, buyInstrument, sellEx, sellInstrument, pair, direction, opDataForCopyStr);
+    } else if (event.target.classList.contains('calculator-button')) {
+        const pair = event.target.dataset.pair;
+        const direction = event.target.dataset.direction;
+        const buyEx = event.target.dataset.buyEx;
+        const sellEx = event.target.dataset.sellEx;
+        abrirCalculadora(pair, direction, buyEx, sellEx, true);
+    }
+});
+
+blockedOpsTableBodyEl.addEventListener('click', (event) => {
+    if (event.target.classList.contains('unblock-button')) {
+        const key = event.target.dataset.key;
+        unblockOpportunity(key);
+    }
+});
+
+function toggleFavorite(pair) {
+    const index = state.favoritedOps.indexOf(pair);
+    if (index > -1) {
+        state.favoritedOps.splice(index, 1);
+    } else {
+        state.favoritedOps.push(pair);
+    }
+    saveStateToLocalStorage();
+    requestUiUpdate();
+}
+
+function unblockOpportunity(key) {
+    state.blockedOps = state.blockedOps.filter(op => op.key !== key);
+    saveStateToLocalStorage();
+    requestUiUpdate();
+}
+
+// --- Local Storage ---
+function saveStateToLocalStorage() {
+    localStorage.setItem(DEFAULT_CAPITAL_STORAGE_KEY, state.defaultCapitalUSD);
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(state.favoritedOps));
+    localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(state.blockedOps));
+    localStorage.setItem(MONITOR_PARES_EXPANDED_KEY, state.isMonitorParesExpanded);
+    localStorage.setItem(WATCHED_PAIRS_EXPANDED_KEY, state.isWatchedPairsExpanded);
+    localStorage.setItem(HIDDEN_WATCHED_OPS_STORAGE_KEY, JSON.stringify(Array.from(state.hiddenWatchedOps)));
+    localStorage.setItem(THEME_STORAGE_KEY, state.isDarkTheme ? 'dark' : 'light');
+
+    // Salvar filtros
+    localStorage.setItem('arbitrageDashboard_filters_v1', JSON.stringify(state.filters));
+    localStorage.setItem('arbitrageDashboard_config_arbitrage_v1', JSON.stringify(state.config.arbitrage));
+    localStorage.setItem('arbitrageDashboard_soundProfitThreshold_v1', state.soundProfitThreshold);
+    localStorage.setItem('arbitrageDashboard_sidebarCollapsed_v1', state.sidebarCollapsed);
+    localStorage.setItem('arbitrageDashboard_currentView_v1', state.currentView);
+    localStorage.setItem('arbitrageDashboard_showBlockedOps_v1', state.showBlockedOps);
+}
+
+function loadStateFromLocalStorage() {
+    state.defaultCapitalUSD = parseFloat(localStorage.getItem(DEFAULT_CAPITAL_STORAGE_KEY)) || 0;
+    state.favoritedOps = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY)) || [];
+    state.blockedOps = JSON.parse(localStorage.getItem(BLOCKED_STORAGE_KEY)) || [];
+    state.isMonitorParesExpanded = localStorage.getItem(MONITOR_PARES_EXPANDED_KEY) === 'true';
+    state.isWatchedPairsExpanded = localStorage.getItem(WATCHED_PAIRS_EXPANDED_KEY) === 'true';
+    state.hiddenWatchedOps = new Set(JSON.parse(localStorage.getItem(HIDDEN_WATCHED_OPS_STORAGE_KEY)) || []);
+    state.isDarkTheme = localStorage.getItem(THEME_STORAGE_KEY) === 'dark';
+
+    // Carregar filtros
+    const savedFilters = JSON.parse(localStorage.getItem('arbitrageDashboard_filters_v1'));
+    if (savedFilters) {
+        Object.assign(state.filters, savedFilters);
+    }
+    const savedArbitrageConfig = JSON.parse(localStorage.getItem('arbitrageDashboard_config_arbitrage_v1'));
+    if (savedArbitrageConfig) {
+        Object.assign(state.config.arbitrage, savedArbitrageConfig);
+    }
+    state.soundProfitThreshold = parseFloat(localStorage.getItem('arbitrageDashboard_soundProfitThreshold_v1')) || 0;
+    state.sidebarCollapsed = localStorage.getItem('arbitrageDashboard_sidebarCollapsed_v1') === 'true';
+    state.currentView = localStorage.getItem('arbitrageDashboard_currentView_v1') || 'arbitragens';
+    state.showBlockedOps = localStorage.getItem('arbitrageDashboard_showBlockedOps_v1') === 'true';
+
+    // Atualizar o header da quantidade sugerida com base no capital padrão carregado
+    qtySugBaseUnitHeaderEl.textContent = `(${state.defaultCapitalUSD > 0 ? 'USD' : 'QTD'})`;
+}
+
+function toggleSound() {
+    state.soundEnabled = !state.soundEnabled;
+    if (state.soundEnabled && !state.soundPermissionGranted) {
+        // Solicitar permissão de áudio se ainda não foi concedida
+        // (Esta parte pode ser mais complexa e depende do navegador, 
+        // para simplificar, assumimos que a permissão é dada ao interagir)
+        state.soundPermissionGranted = true; 
+    }
+    elements.soundOnIcon.style.display = state.soundEnabled ? 'block' : 'none';
+    elements.soundOffIcon.style.display = state.soundEnabled ? 'none' : 'block';
+    elements.toggleSoundButton.querySelector('.control-button-text').textContent = state.soundEnabled ? 'Som ON' : 'Som OFF';
+    saveStateToLocalStorage();
+}
+
+function toggleTheme() {
+    state.isDarkTheme = !state.isDarkTheme;
+    document.body.classList.toggle('dark-theme', state.isDarkTheme);
+    elements.sunIcon.style.display = state.isDarkTheme ? 'none' : 'block';
+    elements.moonIcon.style.display = state.isDarkTheme ? 'block' : 'none';
+    elements.themeToggleButton.querySelector('.control-button-text').textContent = state.isDarkTheme ? 'Escuro' : 'Claro';
+    saveStateToLocalStorage();
+}
+
+function togglePause() {
+    state.isPaused = !state.isPaused;
+    elements.pauseIcon.style.display = state.isPaused ? 'block' : 'none';
+    elements.playIcon.style.display = state.isPaused ? 'none' : 'block';
+    elements.togglePauseButton.querySelector('.control-button-text').textContent = state.isPaused ? 'Retomar' : 'Pausar';
+    saveStateToLocalStorage();
+}
+
+// --- Inicialização ---
+// Já está no DOMContentLoaded
+
+// Exemplo de uso de sound alert (precisa de um arquivo de áudio e lógica de reprodução)
+// function playSoundAlert() {
+//     const audio = new Audio('path/to/your/alert.mp3');
+//     audio.play().catch(e => console.error("Erro ao tocar som:", e));
+// }
 
