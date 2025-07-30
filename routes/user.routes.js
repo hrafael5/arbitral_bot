@@ -1,3 +1,5 @@
+// routes/user.routes.js (Versão Final Completa e Revisada)
+
 const express = require("express");
 const router = express.Router();
 const crypto = require("crypto");
@@ -5,164 +7,97 @@ const { Op } = require("sequelize");
 const User = require("../models/user.model");
 const UserConfiguration = require("../models/userConfiguration.model");
 
-// Importar as funções de e-mail melhoradas
+// Funções de e-mail (supondo que sendPasswordResetEmail também existe)
 const { sendFreeWelcomeEmail, sendPasswordResetEmail } = require("../utils/emailService");
 
-// Middleware para rate limiting (implementação simples)
-const loginAttempts = new Map();
-
-const rateLimitMiddleware = (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress;
-  const now = Date.now();
-  const windowMs = 15 * 60 * 1000; // 15 minutos
-  const maxAttempts = 10;
-
-  if (!loginAttempts.has(ip)) {
-    loginAttempts.set(ip, { count: 1, resetTime: now + windowMs });
+// Middleware de autenticação reutilizável
+const isAuthenticated = (req, res, next) => {
+  if (req.session && req.session.userId) {
     return next();
   }
-
-  const attempts = loginAttempts.get(ip);
-  
-  if (now > attempts.resetTime) {
-    attempts.count = 1;
-    attempts.resetTime = now + windowMs;
-    return next();
-  }
-
-  if (attempts.count >= maxAttempts) {
-    return res.status(429).json({ 
-      message: "Muitas tentativas de login. Tente novamente em 15 minutos." 
-    });
-  }
-
-  attempts.count++;
-  next();
+  res.status(401).json({ message: "Acesso não autorizado. Por favor, faça login." });
 };
 
-// Rota de Cadastro (Register) - MELHORADA COM E-MAIL DE BOAS-VINDAS
+// Rota de Cadastro (Register)
 router.post("/register", async (req, res) => {
   try {
     const { name, email, whatsapp, password } = req.body;
-    
     console.log(`📝 Tentativa de cadastro para: ${email}`);
-    
-    // Validações básicas
+
     if (!name || !email || !password) {
-      return res.status(400).json({ 
-        message: "Por favor, preencha todos os campos obrigatórios: nome, email e senha." 
-      });
+      return res.status(400).json({ message: "Nome, email e senha são obrigatórios." });
     }
 
-    // Verificar se o email já existe
-    const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
-    if (existingUser) {
-      return res.status(409).json({ 
-        message: "Este email já está cadastrado. Tente fazer login ou use outro email." 
-      });
-    }
-
-    // Criar novo usuário
-    const newUser = await User.create({ 
+    // Criar novo usuário com o status 'free'
+    const newUser = await User.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
       whatsapp: whatsapp ? whatsapp.trim() : null,
-      password 
+      password,
+      subscriptionStatus: 'free' // <-- CORREÇÃO PRINCIPAL
     });
-
     console.log(`✅ Novo usuário criado: ${newUser.id} - ${newUser.email}`);
 
-    // Criar configurações padrão do usuário
+    // Criar configurações padrão
     await UserConfiguration.create({ UserId: newUser.id });
 
-    // Gerar token de verificação de email
-    const verificationToken = newUser.generateEmailVerificationToken();
-    await newUser.save();
-
-    // NOVO: Enviar e-mail de boas-vindas para conta free
+    // Enviar e-mail de boas-vindas
     try {
       await sendFreeWelcomeEmail(newUser.email, newUser.name);
       console.log(`📧 E-mail de boas-vindas (free) enviado para: ${newUser.email}`);
     } catch (emailError) {
-      console.error(`❌ Erro ao enviar e-mail de boas-vindas para ${newUser.email}:`, emailError);
-      // Não falha o cadastro se o e-mail não for enviado
+      console.error(`❌ Erro ao enviar e-mail para ${newUser.email}:`, emailError);
     }
 
-    // Fazer login automático após cadastro
+    // Login automático após cadastro
     req.session.userId = newUser.id;
     
-    res.status(201).json({ 
-      message: "Conta criada com sucesso! Verifique seu email para conhecer todas as funcionalidades.",
-      emailSent: true
-    });
+    res.status(201).json({ message: "Conta criada com sucesso!" });
     
   } catch (error) {
     console.error("Erro no cadastro:", error);
-    
-    // Capturar erros de validação do Sequelize
     if (error.name === "SequelizeValidationError") {
-      const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages.join(" ") });
+      return res.status(400).json({ message: error.errors.map(e => e.message).join(', ') });
     }
-    
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(409).json({ message: "Este email já está cadastrado." });
     }
-    
-    res.status(500).json({ message: "Erro interno ao criar o usuário." });
+    res.status(500).json({ message: "Ocorreu um erro interno ao criar sua conta." });
   }
 });
 
-// Rota de Login
-router.post("/login", rateLimitMiddleware, async (req, res) => {
+// Rota de Login com sistema de bloqueio
+router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    console.log(`🔐 Tentativa de login para: ${email}`);
-
     if (!email || !password) {
       return res.status(400).json({ message: "Email e senha são obrigatórios." });
     }
 
-    // Buscar usuário
-    const user = await User.findOne({ 
-      where: { email: email.toLowerCase() },
-      include: [UserConfiguration]
-    });
-
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
     if (!user) {
-      return res.status(401).json({ message: "Credenciais inválidas." });
+      return res.status(401).json({ message: "Email ou senha inválidos." });
     }
 
-    // Verificar senha
+    if (user.isLocked()) {
+      return res.status(429).json({ message: "Conta temporariamente bloqueada. Tente novamente mais tarde." });
+    }
+
     const isValidPassword = await user.validatePassword(password);
     if (!isValidPassword) {
-      return res.status(401).json({ message: "Credenciais inválidas." });
+      await user.incrementLoginAttempts();
+      return res.status(401).json({ message: "Email ou senha inválidos." });
     }
 
-    // Atualizar último login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Criar sessão
+    await user.resetLoginAttempts();
     req.session.userId = user.id;
     
     console.log(`✅ Login bem-sucedido para: ${user.email} (ID: ${user.id})`);
-
-    res.json({ 
-      message: "Login realizado com sucesso!",
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        subscriptionStatus: user.subscriptionStatus,
-        emailVerified: user.emailVerified
-      }
-    });
+    res.json({ message: "Login realizado com sucesso!" });
 
   } catch (error) {
     console.error("Erro no login:", error);
-    res.status(500).json({ message: "Erro interno no servidor." });
+    res.status(500).json({ message: "Ocorreu um erro interno durante o login." });
   }
 });
 
@@ -170,96 +105,74 @@ router.post("/login", rateLimitMiddleware, async (req, res) => {
 router.post("/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) {
-      console.error("Erro ao fazer logout:", err);
-      return res.status(500).json({ message: "Erro ao fazer logout." });
+      return res.status(500).json({ message: "Não foi possível fazer logout." });
     }
+    res.clearCookie('connect.sid');
     res.json({ message: "Logout realizado com sucesso!" });
   });
 });
 
-// Rota para verificar se o usuário está logado
-router.get("/me", async (req, res) => {
+// Rota para obter dados do usuário logado
+router.get("/me", isAuthenticated, async (req, res) => {
   try {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Usuário não autenticado." });
-    }
-
     const user = await User.findByPk(req.session.userId, {
-      include: [UserConfiguration],
-      attributes: { exclude: ['password', 'passwordResetToken', 'passwordResetExpires'] }
+      attributes: { exclude: ['password', 'resetToken', 'resetTokenExpiry', 'emailVerificationToken', 'emailVerificationExpiry'] }
     });
-
     if (!user) {
       req.session.destroy();
-      return res.status(401).json({ message: "Usuário não encontrado." });
+      return res.status(404).json({ message: "Usuário não encontrado." });
     }
-
-    res.json({ user });
-
+    res.json(user);
   } catch (error) {
-    console.error("Erro ao buscar dados do usuário:", error);
-    res.status(500).json({ message: "Erro interno no servidor." });
+    console.error(`Erro ao buscar dados do usuário ${req.session.userId}:`, error);
+    res.status(500).json({ message: "Erro ao buscar dados do usuário." });
   }
 });
 
-// Rota para solicitar redefinição de senha - MELHORADA
+// Rota para solicitar redefinição de senha
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
-    
-    console.log(`🔑 Solicitação de redefinição de senha para: ${email}`);
-
     if (!email) {
       return res.status(400).json({ message: "Email é obrigatório." });
     }
 
     const user = await User.findOne({ where: { email: email.toLowerCase() } });
-    
-    if (!user) {
-      // Por segurança, não revelamos se o email existe ou não
-      return res.json({ 
-        message: "Se o email estiver cadastrado, você receberá as instruções para redefinir sua senha." 
-      });
+    if (user) {
+      const resetToken = user.generatePasswordResetToken(); // Usa o método do modelo
+      await user.save();
+      
+      try {
+        await sendPasswordResetEmail(user.email, resetToken);
+        console.log(`📧 E-mail de redefinição enviado para: ${user.email}`);
+      } catch (emailError) {
+        console.error(`❌ Erro ao enviar e-mail de redefinição para ${user.email}:`, emailError);
+        return res.status(500).json({ message: "Erro ao enviar email de redefinição." });
+      }
     }
-
-    // Gerar token de redefinição
-    const resetToken = user.generatePasswordResetToken();
-    await user.save();
-
-    // Enviar email de redefinição com design melhorado
-    try {
-      await sendPasswordResetEmail(user.email, resetToken);
-      console.log(`📧 E-mail de redefinição enviado para: ${user.email}`);
-    } catch (emailError) {
-      console.error(`❌ Erro ao enviar e-mail de redefinição para ${user.email}:`, emailError);
-      return res.status(500).json({ message: "Erro ao enviar email de redefinição." });
-    }
-
-    res.json({ 
-      message: "Se o email estiver cadastrado, você receberá as instruções para redefinir sua senha." 
-    });
-
+    // Por segurança, sempre retorne a mesma mensagem
+    res.json({ message: "Se o email estiver cadastrado, você receberá as instruções para redefinir sua senha." });
   } catch (error) {
     console.error("Erro na solicitação de redefinição de senha:", error);
     res.status(500).json({ message: "Erro interno no servidor." });
   }
 });
 
-// Rota para verificar email
+// Rota para verificar email (NÃO precisa de autenticação)
 router.get("/verify-email", async (req, res) => {
   try {
     const { token } = req.query;
-
     if (!token) {
       return res.status(400).json({ message: "Token de verificação é obrigatório." });
     }
 
+    // Criptografa o token recebido para comparar com o que está no DB
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
     
     const user = await User.findOne({
       where: {
         emailVerificationToken: hashedToken,
-        emailVerificationExpires: { [Op.gt]: Date.now() }
+        emailVerificationExpiry: { [Op.gt]: new Date() } // [Op.gt] significa "maior que"
       }
     });
 
@@ -267,14 +180,12 @@ router.get("/verify-email", async (req, res) => {
       return res.status(400).json({ message: "Token inválido ou expirado." });
     }
 
-    // Marcar email como verificado
     user.emailVerified = true;
     user.emailVerificationToken = null;
-    user.emailVerificationExpires = null;
+    user.emailVerificationExpiry = null;
     await user.save();
 
     res.json({ message: "Email verificado com sucesso!" });
-
   } catch (error) {
     console.error("Erro na verificação de email:", error);
     res.status(500).json({ message: "Erro interno no servidor." });
@@ -282,192 +193,98 @@ router.get("/verify-email", async (req, res) => {
 });
 
 // Rota para atualizar perfil do usuário
-router.put("/profile", async (req, res) => {
+router.put("/profile", isAuthenticated, async (req, res) => {
   try {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Usuário não autenticado." });
-    }
-
     const { name, whatsapp } = req.body;
-    
     const user = await User.findByPk(req.session.userId);
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado." });
-    }
 
-    // Atualizar dados
     if (name) user.name = name.trim();
     if (whatsapp !== undefined) user.whatsapp = whatsapp ? whatsapp.trim() : null;
     
     await user.save();
-
-    res.json({ 
-      message: "Perfil atualizado com sucesso!",
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        whatsapp: user.whatsapp,
-        subscriptionStatus: user.subscriptionStatus
-      }
-    });
-
+    res.json({ message: "Perfil atualizado com sucesso!" });
   } catch (error) {
     console.error("Erro ao atualizar perfil:", error);
     res.status(500).json({ message: "Erro interno no servidor." });
   }
 });
 
-// Rota para alterar senha (usuário logado)
-router.put("/change-password", async (req, res) => {
+// Rota para alterar senha
+router.put("/change-password", isAuthenticated, async (req, res) => {
   try {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Usuário não autenticado." });
-    }
-
     const { currentPassword, newPassword } = req.body;
-
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ message: "Senha atual e nova senha são obrigatórias." });
     }
 
     const user = await User.findByPk(req.session.userId);
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado." });
-    }
-
-    // Verificar senha atual
     const isValidPassword = await user.validatePassword(currentPassword);
     if (!isValidPassword) {
       return res.status(400).json({ message: "Senha atual incorreta." });
     }
 
-    // Atualizar senha
-    user.password = newPassword;
+    user.password = newPassword; // O hook 'beforeUpdate' no modelo irá criptografar
     await user.save();
-
     res.json({ message: "Senha alterada com sucesso!" });
-
   } catch (error) {
     console.error("Erro ao alterar senha:", error);
-    
     if (error.name === "SequelizeValidationError") {
-      const messages = error.errors.map(err => err.message);
-      return res.status(400).json({ message: messages.join(" ") });
+      return res.status(400).json({ message: error.errors.map(e => e.message).join(', ') });
     }
-    
     res.status(500).json({ message: "Erro interno no servidor." });
   }
 });
 
 // Rota para deletar conta
-router.delete("/account", async (req, res) => {
+router.delete("/account", isAuthenticated, async (req, res) => {
   try {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Usuário não autenticado." });
-    }
-
     const { password } = req.body;
-
     if (!password) {
       return res.status(400).json({ message: "Senha é obrigatória para deletar a conta." });
     }
 
     const user = await User.findByPk(req.session.userId);
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado." });
-    }
-
-    // Verificar senha
     const isValidPassword = await user.validatePassword(password);
     if (!isValidPassword) {
       return res.status(400).json({ message: "Senha incorreta." });
     }
 
-    // Deletar configurações do usuário primeiro (devido à foreign key)
     await UserConfiguration.destroy({ where: { UserId: user.id } });
-    
-    // Deletar usuário
     await user.destroy();
-
-    // Destruir sessão
     req.session.destroy();
-
     res.json({ message: "Conta deletada com sucesso." });
-
   } catch (error) {
     console.error("Erro ao deletar conta:", error);
     res.status(500).json({ message: "Erro interno no servidor." });
   }
 });
 
+// --- ROTAS DE CONFIGURAÇÕES (PROTEGIDAS) ---
+
+router.get("/settings", isAuthenticated, async (req, res) => {
+    try {
+        const userConfig = await UserConfiguration.findOne({ where: { UserId: req.session.userId } });
+        if (!userConfig) {
+            return res.status(404).json({ message: "Configurações não encontradas." });
+        }
+        res.json(userConfig);
+    } catch (error) {
+        console.error(`Erro ao buscar config do usuário ${req.session.userId}:`, error);
+        res.status(500).json({ message: "Erro ao buscar configurações." });
+    }
+});
+
+router.post("/settings", isAuthenticated, async (req, res) => {
+    try {
+        const [userConfig] = await UserConfiguration.findOrCreate({
+            where: { UserId: req.session.userId }
+        });
+        await userConfig.update(req.body);
+        res.json({ message: "Configurações salvas com sucesso!", config: userConfig });
+    } catch (error) {
+        console.error(`Erro ao salvar config do usuário ${req.session.userId}:`, error);
+        res.status(500).json({ message: "Erro ao salvar configurações." });
+    }
+});
+
 module.exports = router;
-
-
-
-// Rota para obter configurações do usuário
-router.get("/settings", async (req, res) => {
-  try {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Usuário não autenticado." });
-    }
-
-    const userConfig = await UserConfiguration.findOne({ where: { UserId: req.session.userId } });
-
-    if (!userConfig) {
-      return res.status(404).json({ message: "Configurações do usuário não encontradas." });
-    }
-
-    res.json({ config: userConfig });
-
-  } catch (error) {
-    console.error("Erro ao buscar configurações do usuário:", error);
-    res.status(500).json({ message: "Erro interno no servidor." });
-  }
-});
-
-// Rota para atualizar configurações do usuário
-router.put("/settings", async (req, res) => {
-  try {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Usuário não autenticado." });
-    }
-
-    const { 
-      minProfitPercentage,
-      enableFuturesVsFutures,
-      enableSpotVsSpot,
-      mexcSpotMakerFee,
-      mexcFuturesMakerFee,
-      gateioSpotMakerFee,
-      gateioFuturesMakerFee,
-      blacklistedTokens
-    } = req.body;
-
-    const userConfig = await UserConfiguration.findOne({ where: { UserId: req.session.userId } });
-
-    if (!userConfig) {
-      return res.status(404).json({ message: "Configurações do usuário não encontradas." });
-    }
-
-    // Atualizar campos, se fornecidos
-    if (minProfitPercentage !== undefined) userConfig.minProfitPercentage = minProfitPercentage;
-    if (enableFuturesVsFutures !== undefined) userConfig.enableFuturesVsFutures = enableFuturesVsFutures;
-    if (enableSpotVsSpot !== undefined) userConfig.enableSpotVsSpot = enableSpotVsSpot;
-    if (mexcSpotMakerFee !== undefined) userConfig.mexcSpotMakerFee = mexcSpotMakerFee;
-    if (mexcFuturesMakerFee !== undefined) userConfig.mexcFuturesMakerFee = mexcFuturesMakerFee;
-    if (gateioSpotMakerFee !== undefined) userConfig.gateioSpotMakerFee = gateioSpotMakerFee;
-    if (gateioFuturesMakerFee !== undefined) userConfig.gateioFuturesMakerFee = gateioFuturesMakerFee;
-    if (blacklistedTokens !== undefined) userConfig.blacklistedTokens = blacklistedTokens;
-
-    await userConfig.save();
-
-    res.json({ message: "Configurações atualizadas com sucesso!", config: userConfig });
-
-  } catch (error) {
-    console.error("Erro ao atualizar configurações do usuário:", error);
-    res.status(500).json({ message: "Erro interno no servidor." });
-  }
-});
-
-
