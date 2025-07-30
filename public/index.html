@@ -11,6 +11,82 @@
   <link rel="preconnect" href="https://www.gate.io" crossorigin>
   <link rel="dns-prefetch" href="https://www.gate.io">
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* Estilos para funcionalidades premium bloqueadas */
+    .locked-feature {
+      opacity: 0.6;
+      pointer-events: none;
+      position: relative;
+    }
+    .locked-feature .lock-icon {
+      margin-left: 5px;
+      font-size: 0.8em;
+      vertical-align: middle;
+    }
+    .locked-feature::after {
+      content: "> Premium";
+      position: absolute;
+      top: 50%;
+      right: 10px;
+      transform: translateY(-50%);
+      background-color: var(--primary-color);
+      color: white;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 0.7em;
+      white-space: nowrap;
+    }
+    .premium-feature-row {
+        /* Estilo para linhas de oportunidades premium, se necessário */
+    }
+    .premium-option {
+        color: #999; /* Cor para opções desabilitadas no select */
+    }
+    /* Estilos para o banner de upgrade */
+    .alert-banner {
+      padding: 10px 20px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.9em;
+      color: #fff;
+    }
+    .premium-alert {
+      background-color: #ffc107; /* Amarelo */
+      color: #333;
+    }
+    .banner-content {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .banner-icon {
+      font-size: 1.5em;
+    }
+    .banner-upgrade-button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    }
+    .banner-upgrade-button:hover {
+      background-color: #0056b3;
+    }
+    .banner-close {
+      background: none;
+      border: none;
+      color: #333;
+      font-size: 1.5em;
+      cursor: pointer;
+      margin-left: 15px;
+    }
+  </style>
 </head>
 <body>
   <div id="upgrade-message"></div>
@@ -164,7 +240,7 @@
             </div>
           </div>
 
-          <div class="filter-group">
+          <div class="filter-group premium-feature">
             <div class="checkbox-stack">
               <label for="filter-enable-fut-fut">
                 <input type="checkbox" id="filter-enable-fut-fut">
@@ -177,12 +253,12 @@
             </div>
           </div>
 
-          <div class="filter-group">
+          <div class="filter-group premium-feature">
             <label for="filter-min-volume">Vol. Mín (USD):</label>
             <input type="number" id="filter-min-volume" value="0" min="0">
           </div>
 
-          <div class="filter-group">
+          <div class="filter-group premium-feature">
             <label>Financ. (%):</label>
             <input type="number" id="filter-funding-min" placeholder="Mín" step="0.001">
             <span style="margin: 0 2px;">-</span>
@@ -245,15 +321,15 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th class="sortable" onclick="sortByColumn('pair')">PAR <span class="sort-arrow" id="sort-arrow-pair"></span></th>
+                <th class="sortable" onclick="sortByColumn(\'pair\')">PAR <span class="sort-arrow" id="sort-arrow-pair"></span></th>
                 <th>COMPRA</th>
                 <th>VENDA</th>
-                <th class="sortable" onclick="sortByColumn('netSpreadPercentage')">ENTRADA (%) <span class="sort-arrow" id="sort-arrow-netSpreadPercentage"></span></th>
-                <th class="sortable" onclick="sortByColumn('lucroS')">SAÍDA (%) <span class="sort-arrow" id="sort-arrow-lucroS"></span></th>
-                <th class="sortable" onclick="sortByColumn('volume')">VOLUMES (SPOT/FUT) <span class="sort-arrow" id="sort-arrow-volume"></span></th>
-                <th class="sortable" onclick="sortByColumn('fundingRate')">FINANC. (REF) <span class="sort-arrow" id="sort-arrow-fundingRate"></span></th>
+                <th class="sortable" onclick="sortByColumn(\'netSpreadPercentage\')">ENTRADA (%) <span class="sort-arrow" id="sort-arrow-netSpreadPercentage"></span></th>
+                <th class="sortable" onclick="sortByColumn(\'lucroS\')">SAÍDA (%) <span class="sort-arrow" id="sort-arrow-lucroS"></span></th>
+                <th class="sortable" onclick="sortByColumn(\'volume\')">VOLUMES (SPOT/FUT) <span class="sort-arrow" id="sort-arrow-volume"></span></th>
+                <th class="sortable" onclick="sortByColumn(\'fundingRate\')">FINANC. (REF) <span class="sort-arrow" id="sort-arrow-fundingRate"></span></th>
                 <th>QTD. SUG. <span id="qty-sug-base-unit-header">(USD)</span></th>
-                <th class="sortable" onclick="sortByColumn('firstSeen')">ABERTURA <span class="sort-arrow" id="sort-arrow-firstSeen"></span></th>
+                <th class="sortable" onclick="sortByColumn(\'firstSeen\')">ABERTURA <span class="sort-arrow" id="sort-arrow-firstSeen"></span></th>
                 <th>CALCULADORA</th>
               </tr>
             </thead>
@@ -334,7 +410,7 @@
           Futuros <span id="mexc-futures-fee">?</span>% ||
           Taxas Gate.io: Spot <span id="gateio-spot-fee">?</span>% |
           Futuros <span id="gateio-futures-fee">?</span>% ||
-          Lucro Mín. Global: <span id="min-profit">?</span>%
+          Lucro Mín. <span id="min-profit">0.1</span>%
         </p>
       </footer>
     </div>
@@ -343,3 +419,5 @@
   <script src="script.js"></script>
 </body>
 </html>
+
+
