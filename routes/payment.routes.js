@@ -3,9 +3,8 @@ const router = express.Router();
 const User = require('../models/user.model'); // Aceder ao nosso modelo de utilizador
 require('dotenv').config();
 
-// Serviço de email para envio de boas‑vindas aos novos assinantes.
-// Este módulo precisa estar disponível em utils/emailService.js conforme sugerido.
-const { sendWelcomeEmail } = require('../utils/emailService');
+// Serviços de email melhorados
+const { sendWelcomeEmail, sendPremiumUpgradeEmail } = require('../utils/emailService');
 
 // Inicializar o Stripe com a sua chave secreta do .env
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -98,7 +97,7 @@ router.post('/create-checkout-session', async (req, res) => {
 });
 
 
-// ROTA 2: RECEBER OS WEBHOOKS DO STRIPE (Cria ou atualiza utilizador)
+// ROTA 2: RECEBER OS WEBHOOKS DO STRIPE (Cria ou atualiza utilizador) - MELHORADA
 router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -123,8 +122,10 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
             
             // O email que o cliente digitou no checkout do Stripe
             const customerEmail = session.customer_details.email.toLowerCase();
+            const customerName = session.customer_details.name || 'Novo Assinante';
             
             console.log(`📧 Processando pagamento para: ${customerEmail}`);
+            console.log(`👤 Nome do cliente: ${customerName}`);
             console.log(`🆔 Customer ID: ${stripeCustomerId}`);
             console.log(`📋 Subscription ID: ${stripeSubscriptionId}`);
 
@@ -152,30 +153,39 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
                 });
 
                 if (user) {
-                    // Se o utilizador já existe, apenas atualizamos os seus dados de assinatura
+                    // USUÁRIO EXISTENTE: Atualiza para premium e envia e-mail de parabéns
                     await user.update(userData);
                     console.log(`✅ Assinatura ativada para o utilizador existente: ${user.id}`);
+                    
+                    // NOVO: Enviar e-mail de parabéns pelo upgrade
+                    try {
+                        await sendPremiumUpgradeEmail(user.email, user.name);
+                        console.log(`🎉 E-mail de parabéns (upgrade premium) enviado para: ${user.email}`);
+                    } catch (err) {
+                        console.error(`❌ Falha ao enviar e-mail de parabéns para ${user.email}:`, err);
+                    }
+                    
                 } else {
-                    // Se o utilizador não existe, criamos uma nova conta para ele
+                    // USUÁRIO NOVO: Cria conta premium e envia e-mail de boas-vindas premium
                     const tempPassword = generateStrongTempPassword();
                     console.log(`🔐 Senha temporária gerada: ${tempPassword}`);
 
                     user = await User.create({
                         email: customerEmail,
-                        name: session.customer_details.name || 'Novo Assinante',
+                        name: customerName,
                         password: tempPassword, // O hook do modelo irá encriptar
                         emailVerified: true, // Consideramos o email verificado, pois ele pagou
                         ...userData
                     });
                     
-                    console.log(`✅ Novo utilizador criado a partir do pagamento: ${user.id}`);
+                    console.log(`✅ Novo utilizador premium criado: ${user.id}`);
                     
-                    // Enviar email de boas‑vindas para o novo utilizador com link para definir a sua senha.
+                    // Enviar email de boas‑vindas premium (com link para definir senha)
                     try {
                         await sendWelcomeEmail(customerEmail);
-                        console.log(`📧 Email de boas‑vindas enviado para ${customerEmail}`);
+                        console.log(`📧 E-mail de boas‑vindas premium enviado para ${customerEmail}`);
                     } catch (err) {
-                        console.error(`❌ Falha ao enviar email de boas‑vindas para ${customerEmail}:`, err);
+                        console.error(`❌ Falha ao enviar email de boas‑vindas premium para ${customerEmail}:`, err);
                     }
                 }
             } catch (error) {

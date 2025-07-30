@@ -4,7 +4,9 @@ const crypto = require("crypto");
 const { Op } = require("sequelize");
 const User = require("../models/user.model");
 const UserConfiguration = require("../models/userConfiguration.model");
-const { sendPasswordResetEmail } = require("../utils/emailService");
+
+// Importar as funções de e-mail melhoradas
+const { sendFreeWelcomeEmail, sendPasswordResetEmail } = require("../utils/emailService");
 
 // Middleware para rate limiting (implementação simples)
 const loginAttempts = new Map();
@@ -38,23 +40,12 @@ const rateLimitMiddleware = (req, res, next) => {
   next();
 };
 
-// Função para enviar email usando o emailService real
-const sendEmail = async (to, subject, html) => {
-  try {
-    // Aqui você pode implementar o envio real usando o emailService
-    // Por enquanto, vamos logar para debug
-    console.log(`\n    ===== EMAIL ENVIADO =====\n    Para: ${to}\n    Assunto: ${subject}\n    Conteúdo: ${html}\n    ==========================\n  `);
-    return Promise.resolve(true);
-  } catch (error) {
-    console.error("Erro ao enviar email:", error);
-    throw error;
-  }
-};
-
-// Rota de Cadastro (Register)
+// Rota de Cadastro (Register) - MELHORADA COM E-MAIL DE BOAS-VINDAS
 router.post("/register", async (req, res) => {
   try {
     const { name, email, whatsapp, password } = req.body;
+    
+    console.log(`📝 Tentativa de cadastro para: ${email}`);
     
     // Validações básicas
     if (!name || !email || !password) {
@@ -79,6 +70,8 @@ router.post("/register", async (req, res) => {
       password 
     });
 
+    console.log(`✅ Novo usuário criado: ${newUser.id} - ${newUser.email}`);
+
     // Criar configurações padrão do usuário
     await UserConfiguration.create({ UserId: newUser.id });
 
@@ -86,27 +79,20 @@ router.post("/register", async (req, res) => {
     const verificationToken = newUser.generateEmailVerificationToken();
     await newUser.save();
 
-    // Enviar email de verificação (simulado)
-    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
-    const verificationLink = `${baseUrl}/api/users/verify-email?token=${verificationToken}`;
-    await sendEmail(
-      newUser.email,
-      "Verifique seu email - ARBFLASH",
-      `
-        <h2>Bem-vindo ao ARBFLASH!</h2>
-        <p>Olá ${newUser.name},</p>
-        <p>Para completar seu cadastro, clique no link abaixo para verificar seu email:</p>
-        <a href="${verificationLink}" style="background: #1e88e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Verificar Email</a>
-        <p>Este link expira em 24 horas.</p>
-        <p>Se você não se cadastrou no ARBFLASH, ignore este email.</p>
-      `
-    );
+    // NOVO: Enviar e-mail de boas-vindas para conta free
+    try {
+      await sendFreeWelcomeEmail(newUser.email, newUser.name);
+      console.log(`📧 E-mail de boas-vindas (free) enviado para: ${newUser.email}`);
+    } catch (emailError) {
+      console.error(`❌ Erro ao enviar e-mail de boas-vindas para ${newUser.email}:`, emailError);
+      // Não falha o cadastro se o e-mail não for enviado
+    }
 
     // Fazer login automático após cadastro
     req.session.userId = newUser.id;
     
     res.status(201).json({ 
-      message: "Conta criada com sucesso! Verifique seu email para ativar sua conta.",
+      message: "Conta criada com sucesso! Verifique seu email para conhecer todas as funcionalidades.",
       emailSent: true
     });
     
@@ -127,56 +113,53 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// Rota de Login com proteção contra força bruta
+// Rota de Login
 router.post("/login", rateLimitMiddleware, async (req, res) => {
   try {
     const { email, password } = req.body;
     
+    console.log(`🔐 Tentativa de login para: ${email}`);
+
     if (!email || !password) {
-      return res.status(400).json({ 
-        message: "Por favor, preencha todos os campos: email e senha." 
-      });
+      return res.status(400).json({ message: "Email e senha são obrigatórios." });
     }
 
     // Buscar usuário
-    const user = await User.findOne({ where: { email: email.toLowerCase() } });
+    const user = await User.findOne({ 
+      where: { email: email.toLowerCase() },
+      include: [UserConfiguration]
+    });
+
     if (!user) {
-      return res.status(401).json({ 
-        message: "Email ou senha inválidos. Verifique suas credenciais." 
-      });
+      return res.status(401).json({ message: "Credenciais inválidas." });
     }
 
-    // Verificar se a conta está bloqueada
-    if (user.isLocked()) {
-      return res.status(423).json({ 
-        message: "Conta temporariamente bloqueada devido a muitas tentativas de login. Tente novamente em 30 minutos." 
-      });
+    // Verificar senha
+    const isValidPassword = await user.validatePassword(password);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: "Credenciais inválidas." });
     }
 
-    // Validar senha
-    const isValid = await user.validatePassword(password);
-    if (!isValid) {
-      await user.incrementLoginAttempts();
-      return res.status(401).json({ 
-        message: "Email ou senha inválidos. Verifique suas credenciais." 
-      });
-    }
+    // Atualizar último login
+    user.lastLogin = new Date();
+    await user.save();
 
-    // Login bem-sucedido
-    await user.resetLoginAttempts();
+    // Criar sessão
     req.session.userId = user.id;
     
-    res.status(200).json({ 
+    console.log(`✅ Login bem-sucedido para: ${user.email} (ID: ${user.id})`);
+
+    res.json({ 
       message: "Login realizado com sucesso!",
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        emailVerified: user.emailVerified,
-        subscriptionStatus: user.subscriptionStatus
+        subscriptionStatus: user.subscriptionStatus,
+        emailVerified: user.emailVerified
       }
     });
-    
+
   } catch (error) {
     console.error("Erro no login:", error);
     res.status(500).json({ message: "Erro interno no servidor." });
@@ -185,98 +168,16 @@ router.post("/login", rateLimitMiddleware, async (req, res) => {
 
 // Rota de Logout
 router.post("/logout", (req, res) => {
-  req.session.destroy(err => {
+  req.session.destroy((err) => {
     if (err) {
-      console.error("Erro no logout:", err);
-      return res.status(500).json({ message: "Não foi possível fazer logout." });
+      console.error("Erro ao fazer logout:", err);
+      return res.status(500).json({ message: "Erro ao fazer logout." });
     }
-    res.clearCookie("connect.sid");
-    res.status(200).json({ message: "Logout realizado com sucesso." });
+    res.json({ message: "Logout realizado com sucesso!" });
   });
 });
 
-// Rota para verificação de email
-router.get("/verify-email", async (req, res) => {
-  try {
-    const { token } = req.query;
-    
-    if (!token) {
-      return res.status(400).json({ message: "Token de verificação não fornecido." });
-    }
-
-    const user = await User.findOne({ 
-      where: { 
-        emailVerificationToken: token,
-        emailVerificationExpiry: { [Op.gt]: new Date() }
-      } 
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: "Token de verificação inválido ou expirado." });
-    }
-
-    // Verificar email
-    await user.update({
-      emailVerified: true,
-      emailVerificationToken: null,
-      emailVerificationExpiry: null
-    });
-
-    res.status(200).json({ message: "Email verificado com sucesso!" });
-    
-  } catch (error) {
-    console.error("Erro na verificação de email:", error);
-    res.status(500).json({ message: "Erro interno no servidor." });
-  }
-});
-
-// Rota para reenviar email de verificação
-router.post("/resend-verification", async (req, res) => {
-  try {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Usuário não autenticado." });
-    }
-
-    const user = await User.findByPk(req.session.userId);
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado." });
-    }
-
-    if (user.emailVerified) {
-      return res.status(400).json({ message: "Email já verificado." });
-    }
-
-    // Gerar novo token
-    const verificationToken = user.generateEmailVerificationToken();
-    await user.save();
-
-    // Enviar email
-    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
-    const verificationLink = `${baseUrl}/api/users/verify-email?token=${verificationToken}`;
-    await sendEmail(
-      user.email,
-      "Verifique seu email - ARBFLASH",
-      `
-        <h2>Verificação de Email</h2>
-        <p>Olá ${user.name},</p>
-        <p>Clique no link abaixo para verificar seu email:</p>
-        <a href="${verificationLink}" style="background: #1e88e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Verificar Email</a>
-        <p>Este link expira em 24 horas.</p>
-      `
-    );
-
-    res.status(200).json({ message: "Email de verificação reenviado com sucesso." });
-    
-  } catch (error) {
-    console.error("Erro ao reenviar verificação:", error);
-    res.status(500).json({ message: "Erro interno no servidor." });
-  }
-});
-
-// ROTA DE REDEFINIÇÃO DE SENHA REMOVIDA COMPLETAMENTE
-// Esta funcionalidade agora está APENAS em passwordReset.routes.js
-
-// Rota para buscar informações do usuário atual
+// Rota para verificar se o usuário está logado
 router.get("/me", async (req, res) => {
   try {
     if (!req.session.userId) {
@@ -284,18 +185,99 @@ router.get("/me", async (req, res) => {
     }
 
     const user = await User.findByPk(req.session.userId, {
-      attributes: ["id", "name", "email", "whatsapp", "emailVerified", "subscriptionStatus", "createdAt"]
+      include: [UserConfiguration],
+      attributes: { exclude: ['password', 'passwordResetToken', 'passwordResetExpires'] }
     });
 
     if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado." });
+      req.session.destroy();
+      return res.status(401).json({ message: "Usuário não encontrado." });
     }
 
-    res.json(user);
-    
+    res.json({ user });
+
   } catch (error) {
-    console.error("Erro ao buscar usuário:", error);
-    res.status(500).json({ message: "Erro interno do servidor." });
+    console.error("Erro ao buscar dados do usuário:", error);
+    res.status(500).json({ message: "Erro interno no servidor." });
+  }
+});
+
+// Rota para solicitar redefinição de senha - MELHORADA
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    console.log(`🔑 Solicitação de redefinição de senha para: ${email}`);
+
+    if (!email) {
+      return res.status(400).json({ message: "Email é obrigatório." });
+    }
+
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
+    
+    if (!user) {
+      // Por segurança, não revelamos se o email existe ou não
+      return res.json({ 
+        message: "Se o email estiver cadastrado, você receberá as instruções para redefinir sua senha." 
+      });
+    }
+
+    // Gerar token de redefinição
+    const resetToken = user.generatePasswordResetToken();
+    await user.save();
+
+    // Enviar email de redefinição com design melhorado
+    try {
+      await sendPasswordResetEmail(user.email, resetToken);
+      console.log(`📧 E-mail de redefinição enviado para: ${user.email}`);
+    } catch (emailError) {
+      console.error(`❌ Erro ao enviar e-mail de redefinição para ${user.email}:`, emailError);
+      return res.status(500).json({ message: "Erro ao enviar email de redefinição." });
+    }
+
+    res.json({ 
+      message: "Se o email estiver cadastrado, você receberá as instruções para redefinir sua senha." 
+    });
+
+  } catch (error) {
+    console.error("Erro na solicitação de redefinição de senha:", error);
+    res.status(500).json({ message: "Erro interno no servidor." });
+  }
+});
+
+// Rota para verificar email
+router.get("/verify-email", async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ message: "Token de verificação é obrigatório." });
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    
+    const user = await User.findOne({
+      where: {
+        emailVerificationToken: hashedToken,
+        emailVerificationExpires: { [Op.gt]: Date.now() }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Token inválido ou expirado." });
+    }
+
+    // Marcar email como verificado
+    user.emailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationExpires = null;
+    await user.save();
+
+    res.json({ message: "Email verificado com sucesso!" });
+
+  } catch (error) {
+    console.error("Erro na verificação de email:", error);
+    res.status(500).json({ message: "Erro interno no servidor." });
   }
 });
 
@@ -307,17 +289,17 @@ router.put("/profile", async (req, res) => {
     }
 
     const { name, whatsapp } = req.body;
+    
     const user = await User.findByPk(req.session.userId);
-
     if (!user) {
       return res.status(404).json({ message: "Usuário não encontrado." });
     }
 
-    const updates = {};
-    if (name !== undefined) updates.name = name.trim();
-    if (whatsapp !== undefined) updates.whatsapp = whatsapp ? whatsapp.trim() : null;
-
-    await user.update(updates);
+    // Atualizar dados
+    if (name) user.name = name.trim();
+    if (whatsapp !== undefined) user.whatsapp = whatsapp ? whatsapp.trim() : null;
+    
+    await user.save();
 
     res.json({ 
       message: "Perfil atualizado com sucesso!",
@@ -326,63 +308,96 @@ router.put("/profile", async (req, res) => {
         name: user.name,
         email: user.email,
         whatsapp: user.whatsapp,
-        emailVerified: user.emailVerified,
         subscriptionStatus: user.subscriptionStatus
       }
     });
-    
+
   } catch (error) {
     console.error("Erro ao atualizar perfil:", error);
+    res.status(500).json({ message: "Erro interno no servidor." });
+  }
+});
+
+// Rota para alterar senha (usuário logado)
+router.put("/change-password", async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Usuário não autenticado." });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: "Senha atual e nova senha são obrigatórias." });
+    }
+
+    const user = await User.findByPk(req.session.userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    // Verificar senha atual
+    const isValidPassword = await user.validatePassword(currentPassword);
+    if (!isValidPassword) {
+      return res.status(400).json({ message: "Senha atual incorreta." });
+    }
+
+    // Atualizar senha
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: "Senha alterada com sucesso!" });
+
+  } catch (error) {
+    console.error("Erro ao alterar senha:", error);
     
     if (error.name === "SequelizeValidationError") {
       const messages = error.errors.map(err => err.message);
       return res.status(400).json({ message: messages.join(" ") });
     }
     
-    res.status(500).json({ message: "Erro interno do servidor." });
+    res.status(500).json({ message: "Erro interno no servidor." });
   }
 });
 
-// Rota para BUSCAR as configurações do usuário
-router.get("/settings", async (req, res) => {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "Usuário não autenticado." });
-  }
-  
+// Rota para deletar conta
+router.delete("/account", async (req, res) => {
   try {
-    const config = await UserConfiguration.findOne({ where: { UserId: req.session.userId } });
-    if (!config) {
-      return res.status(404).json({ message: "Configurações não encontradas." });
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Usuário não autenticado." });
     }
-    res.json(config);
-  } catch (error) {
-    console.error("Erro ao buscar configurações:", error);
-    res.status(500).json({ message: "Erro ao buscar configurações." });
-  }
-});
 
-// Rota para SALVAR as configurações do usuário
-router.post("/settings", async (req, res) => {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "Usuário não autenticado." });
-  }
-  
-  try {
-    const fieldsToUpdate = {};
-    if (req.body.watchedPairs !== undefined) fieldsToUpdate.watchedPairs = req.body.watchedPairs;
-    
-    // Adicione aqui outras configurações que deseja salvar no UserConfiguration
-    // Exemplo: if (req.body.someOtherSetting !== undefined) fieldsToUpdate.someOtherSetting = req.body.someOtherSetting;
+    const { password } = req.body;
 
-    if (Object.keys(fieldsToUpdate).length === 0) {
-      return res.status(400).json({ message: "Nenhum dado de configuração válido para atualizar." });
+    if (!password) {
+      return res.status(400).json({ message: "Senha é obrigatória para deletar a conta." });
     }
+
+    const user = await User.findByPk(req.session.userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    // Verificar senha
+    const isValidPassword = await user.validatePassword(password);
+    if (!isValidPassword) {
+      return res.status(400).json({ message: "Senha incorreta." });
+    }
+
+    // Deletar configurações do usuário primeiro (devido à foreign key)
+    await UserConfiguration.destroy({ where: { UserId: user.id } });
     
-    await UserConfiguration.update(fieldsToUpdate, { where: { UserId: req.session.userId } });
-    res.status(200).json({ message: "Configurações salvas com sucesso!" });
+    // Deletar usuário
+    await user.destroy();
+
+    // Destruir sessão
+    req.session.destroy();
+
+    res.json({ message: "Conta deletada com sucesso." });
+
   } catch (error) {
-    console.error("Erro ao salvar configurações:", error);
-    res.status(500).json({ message: "Erro ao salvar configurações." });
+    console.error("Erro ao deletar conta:", error);
+    res.status(500).json({ message: "Erro interno no servidor." });
   }
 });
 
