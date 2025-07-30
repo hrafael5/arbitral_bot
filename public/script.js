@@ -1699,3 +1699,42 @@ function applyFreemiumRestrictions() {
         }
     });
 }
+
+async function fetchUserSubscriptionStatus() {
+    try {
+        const response = await fetch("/api/users/me");
+        if (response.ok) {
+            const userData = await response.json();
+            state.currentUserSubscriptionStatus = userData.subscriptionStatus;
+            console.log("FRONTEND: Status de assinatura do usuário carregado: ", state.currentUserSubscriptionStatus);
+        } else {
+            console.error("FRONTEND: Falha ao buscar status de assinatura do usuário: ", response.status, response.statusText);
+            state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro
+        }
+    } catch (error) {
+        console.error("FRONTEND: Erro ao conectar com a API para buscar status de assinatura: ", error);
+        state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro de rede
+    }
+}
+
+
+
+
+async function fetchUserSubscriptionStatus() {
+    try {
+        const response = await fetch("/api/users/me");
+        if (response.ok) {
+            const userData = await response.json();
+            state.currentUserSubscriptionStatus = userData.subscriptionStatus;
+            console.log("FRONTEND: Status de assinatura do usuário carregado: ", state.currentUserSubscriptionStatus);
+        } else {
+            console.error("FRONTEND: Falha ao buscar status de assinatura do usuário: ", response.status, response.statusText);
+            state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro
+        }
+    } catch (error) {
+        console.error("FRONTEND: Erro ao conectar com a API para buscar status de assinatura: ", error);
+        state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro de rede
+    }
+}
+
+
