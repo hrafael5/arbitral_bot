@@ -403,3 +403,71 @@ router.delete("/account", async (req, res) => {
 
 module.exports = router;
 
+
+
+// Rota para obter configurações do usuário
+router.get("/settings", async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Usuário não autenticado." });
+    }
+
+    const userConfig = await UserConfiguration.findOne({ where: { UserId: req.session.userId } });
+
+    if (!userConfig) {
+      return res.status(404).json({ message: "Configurações do usuário não encontradas." });
+    }
+
+    res.json({ config: userConfig });
+
+  } catch (error) {
+    console.error("Erro ao buscar configurações do usuário:", error);
+    res.status(500).json({ message: "Erro interno no servidor." });
+  }
+});
+
+// Rota para atualizar configurações do usuário
+router.put("/settings", async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Usuário não autenticado." });
+    }
+
+    const { 
+      minProfitPercentage,
+      enableFuturesVsFutures,
+      enableSpotVsSpot,
+      mexcSpotMakerFee,
+      mexcFuturesMakerFee,
+      gateioSpotMakerFee,
+      gateioFuturesMakerFee,
+      blacklistedTokens
+    } = req.body;
+
+    const userConfig = await UserConfiguration.findOne({ where: { UserId: req.session.userId } });
+
+    if (!userConfig) {
+      return res.status(404).json({ message: "Configurações do usuário não encontradas." });
+    }
+
+    // Atualizar campos, se fornecidos
+    if (minProfitPercentage !== undefined) userConfig.minProfitPercentage = minProfitPercentage;
+    if (enableFuturesVsFutures !== undefined) userConfig.enableFuturesVsFutures = enableFuturesVsFutures;
+    if (enableSpotVsSpot !== undefined) userConfig.enableSpotVsSpot = enableSpotVsSpot;
+    if (mexcSpotMakerFee !== undefined) userConfig.mexcSpotMakerFee = mexcSpotMakerFee;
+    if (mexcFuturesMakerFee !== undefined) userConfig.mexcFuturesMakerFee = mexcFuturesMakerFee;
+    if (gateioSpotMakerFee !== undefined) userConfig.gateioSpotMakerFee = gateioSpotMakerFee;
+    if (gateioFuturesMakerFee !== undefined) userConfig.gateioFuturesMakerFee = gateioFuturesMakerFee;
+    if (blacklistedTokens !== undefined) userConfig.blacklistedTokens = blacklistedTokens;
+
+    await userConfig.save();
+
+    res.json({ message: "Configurações atualizadas com sucesso!", config: userConfig });
+
+  } catch (error) {
+    console.error("Erro ao atualizar configurações do usuário:", error);
+    res.status(500).json({ message: "Erro interno no servidor." });
+  }
+});
+
+
