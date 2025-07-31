@@ -3,7 +3,7 @@ const OPPORTUNITY_TTL_MS = 10000;
 const DEFAULT_CAPITAL_STORAGE_KEY = 'arbitrageDashboard_defaultCapital_v1';
 const MONITOR_PARES_EXPANDED_KEY = 'arbitrageDashboard_monitorParesExpanded_v1';
 const WATCHED_PAIRS_EXPANDED_KEY = 'arbitrageDashboard_watchedPairsExpanded_v1';
-const HIDDEN_WATCHED_OPS_STORAGE_KEY = 'arbitrageDashboard_hiddenWatchedOps_v1';
+const HIDDEN_WATCHED_OPS_STORAGE_KEY = 'arbitrageDashboard_hiddenWatchedOps_v1'; // Nova chave para localStorage
 
 const state = {
   allPairsData: [],
@@ -24,7 +24,7 @@ const state = {
   connected: false,
   lastUpdated: null,
   maxOpportunitiesToShow: 30,
-  sortColumn: 'firstSeen',
+  sortColumn: 'netSpreadPercentage',
   sortDirection: 'desc',
   filters: {
     mexcSpot: true,
@@ -41,7 +41,7 @@ const state = {
   favoritedOps: [],
   blockedOps: [],
   watchedPairsList: [],
-  hiddenWatchedOps: new Set(),
+  hiddenWatchedOps: new Set(), // Alterado para Set para melhor performance
   soundEnabled: false,
   soundPermissionGranted: false,
   soundProfitThreshold: 0.0,
@@ -215,6 +215,7 @@ function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false
 }
 
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
+    // 1. Parse dos dados da oportunidade
     let opDataToUse = null;
     if (typeof opDataForCopyStr === 'string' && opDataForCopyStr) {
         try {
@@ -224,6 +225,7 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
+    // 2. Calcular e copiar o valor primeiro, enquanto a página principal tem foco
     if (opDataToUse && opDataToUse.buyPrice && state.defaultCapitalUSD > 0) {
         const buyPrice = parseFloat(opDataToUse.buyPrice);
         if (buyPrice > 0) {
@@ -235,7 +237,9 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
+    // 3. Abrir todas as janelas o mais rápido possível, sem pausas
     abrirCalculadora(pair, direction, buyExchange, sellExchange);
+
     let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
     let urlLeg2 = getExchangeUrl(sellExchange, sellInstrument, pair);
     
@@ -264,7 +268,7 @@ function setCurrentView(view) {
     filterGroupLucroE.style.display = 'none';
     filterGroupLucroS.style.display = 'flex';
   } else {
-    state.sortColumn = 'firstSeen';
+    state.sortColumn = 'netSpreadPercentage';
     state.sortDirection = 'desc';
     filterGroupLucroE.style.display = 'flex';
     filterGroupLucroS.style.display = 'none';
@@ -310,7 +314,8 @@ function toggleBlockedOps() {
 }
 
 function getFilteredOpportunities() {
-    let opportunities = state.arbitrageOpportunities.filter(op => {
+    let opportunities = state.arbitrageOpportunities.filter(opWrapper => {
+        const op = opWrapper.data; // Corrigido: acessando op.data
         if (state.watchedPairsList.includes(op.pair)) return false;
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
 
@@ -374,7 +379,7 @@ function getFilteredOpportunities() {
     });
 
     if (state.currentUserSubscriptionStatus === 'free') {
-        opportunities = opportunities.filter(op => op.netSpreadPercentage < 1.0);
+        opportunities = opportunities.filter(opWrapper => opWrapper.data.netSpreadPercentage < 1.0);
     }
 
     return opportunities;
@@ -514,6 +519,7 @@ function saveBlockedOps() {
   localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(state.blockedOps));
 }
 
+// --- Funções para gerenciar combinações ocultas no localStorage ---
 function loadHiddenWatchedOps() {
     const stored = localStorage.getItem(HIDDEN_WATCHED_OPS_STORAGE_KEY);
     state.hiddenWatchedOps = stored ? new Set(JSON.parse(stored)) : new Set();
@@ -585,12 +591,14 @@ function addWatchedPair() {
   }
 }
 
+// Nova função para remover um par vigiado completamente
 async function removeWatchedPair(pairToRemove) {
     if (confirm(`Tem certeza que deseja remover o par ${pairToRemove} da sua lista de pares vigiados?`)) {
         state.watchedPairsList = state.watchedPairsList.filter(pair => pair !== pairToRemove);
+        // Remover também as combinações ocultas relacionadas a este par
         state.hiddenWatchedOps = new Set(Array.from(state.hiddenWatchedOps).filter(opKey => !opKey.startsWith(`${pairToRemove}|`)));
         saveHiddenWatchedOps();
-        await saveWatchedPairs();
+        await saveWatchedPairs(); // Salva a lista atualizada no servidor
         requestUiUpdate();
     }
 }
@@ -648,7 +656,7 @@ function updateAllUI() {
   renderBlockedOpportunitiesTable();
   renderWatchedPairsTable();
   updateMainTitle();
-  updateWatchedPairsCount();
+  updateWatchedPairsCount(); // Atualiza o contador de pares vigiados
 }
 
 function updateGlobalUIState() {
@@ -784,7 +792,7 @@ function calculateLucroS(op, allMarketData, config) {
     feeForBuyExit = parseFloat(configBuyExit.spotMakerFee);
   } else {
     priceToBuyForExit = marketDataForBuyExit.futuresPrice;
-    feeForBuyExit = parseFloat(configBuyExit.spotMakerFee);
+    feeForBuyExit = parseFloat(configBuyExit.futuresMakerFee);
   }
   if (typeof priceToBuyForExit !=='number' || isNaN(priceToBuyForExit) || priceToBuyForExit <= 0 || typeof priceToSellForExit !=='number' || isNaN(priceToSellForExit) || isNaN(feeForBuyExit) || isNaN(feeForSellExit)) return null;
   const grossSpreadExitDecimal = (priceToSellForExit / priceToBuyForExit) - 1;
@@ -833,12 +841,14 @@ function renderWatchedPairsTable() {
     let tableHtml = "";
     let combinationsFound = 0;
 
+    // Agrupar oportunidades por par para renderizar o cabeçalho do par uma vez
     const opportunitiesByPair = state.watchedPairsList.reduce((acc, pair) => {
-        acc[pair] = state.arbitrageOpportunities.filter(op => {
+        acc[pair] = state.arbitrageOpportunities.filter(opWrapper => {
+            const op = opWrapper.data;
             if (op.pair !== pair) return false;
 
-            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
-            if (state.hiddenWatchedOps.has(opKey)) {
+            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; // Chave mais específica
+            if (state.hiddenWatchedOps.has(opKey)) { // Usar o Set de hiddenWatchedOps
                 return false;
             }
 
@@ -873,10 +883,11 @@ function renderWatchedPairsTable() {
     state.watchedPairsList.forEach(pair => {
         const opportunitiesForPair = opportunitiesByPair[pair];
 
-        if (opportunitiesForPair && opportunitiesForPair.length > 0) {
+        if (opportunitiesForPair.length > 0) {
             combinationsFound += opportunitiesForPair.length;
             const escapedPair = escapeHTML(pair);
 
+            // Adicionar o cabeçalho do par com o novo botão 'Remover Par'
             tableHtml += `
                 <tr class="watched-pair-header-row">
                     <td colspan="8">
@@ -888,12 +899,13 @@ function renderWatchedPairsTable() {
                 </tr>
             `;
 
-            opportunitiesForPair.forEach(op => {
+            opportunitiesForPair.forEach(opWrapper => {
+                const op = opWrapper.data;
                 const lucroE_percent = op.netSpreadPercentage;
                 const lucroS_percent = calculateLucroS(op, state.allPairsData, state.config);
                 const lucroEClass = lucroE_percent >= 0 ? 'profit-positive' : 'profit-negative';
                 const lucroSClass = lucroS_percent === null ? 'profit-zero' : (lucroS_percent >= 0 ? 'profit-positive' : 'profit-negative');
-                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
+                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; // Chave mais específica
 
                 let volumeDisplay, fundingRateDisplay, fundingRateClass = 'profit-zero';
                  if (op.type === "INTER_EXCHANGE_FUT_FUT") {
@@ -913,7 +925,7 @@ function renderWatchedPairsTable() {
                     fundingRateClass = (op.fundingRate || 0) >= 0 ? 'profit-positive' : 'profit-negative';
                 }
 
-                const timeAgo = formatTimeAgo(op.firstSeen);
+                const timeAgo = formatTimeAgo(op.timestamp);
 
                 tableHtml += `
                     <tr>
@@ -942,6 +954,7 @@ function renderWatchedPairsTable() {
 
     watchedPairsTableBodyEl.innerHTML = tableHtml;
 
+    // Adicionar event listeners para os botões de ocultar
     document.querySelectorAll('.hide-watched-op-button').forEach(button => {
         button.addEventListener('click', function() {
             const keyToHide = this.dataset.opKey;
@@ -949,6 +962,7 @@ function renderWatchedPairsTable() {
         });
     });
 
+    // Adicionar event listeners para os novos botões de remover par
     document.querySelectorAll('.remove-pair-button').forEach(button => {
         button.addEventListener('click', function() {
             const pairToRemove = this.dataset.pair;
@@ -966,39 +980,45 @@ function updateWatchedPairsCount() {
 function renderOpportunitiesTable() {
     if (!opportunitiesTableBodyEl || !elements.viewTitle) return;
 
-    const filteredOpportunities = getFilteredOpportunities();
+    const filteredOpWrappers = getFilteredOpportunities();
 
-    const favoritedOps = filteredOpportunities.filter(op => {
-        const opKey = `${op.pair}-${op.direction}`;
+    const favoritedOpWrappers = filteredOpWrappers.filter(opWrapper => {
+        const opKey = `${opWrapper.data.pair}-${opWrapper.data.direction}`;
         return state.favoritedOps.includes(opKey);
     });
-    const normalOps = filteredOpportunities.filter(op => {
-        const opKey = `${op.pair}-${op.direction}`;
+    const normalOpWrappers = filteredOpWrappers.filter(opWrapper => {
+        const opKey = `${opWrapper.data.pair}-${opWrapper.data.direction}`;
         return !state.favoritedOps.includes(opKey);
     });
 
     const sortFunction = (a, b) => {
-        let aVal, bVal;
         if (state.sortColumn === 'lucroS') {
-            aVal = calculateLucroS(a, state.allPairsData, state.config) || -Infinity;
-            bVal = calculateLucroS(b, state.allPairsData, state.config) || -Infinity;
-        } else {
-            aVal = a[state.sortColumn];
-            bVal = b[state.sortColumn];
+            const aVal = calculateLucroS(a.data, state.allPairsData, state.config) || -Infinity;
+            const bVal = calculateLucroS(b.data, state.allPairsData, state.config) || -Infinity;
+            return state.sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+
+        const aVal = a.data[state.sortColumn];
+        const bVal = b.data[state.sortColumn];
+
+        if (state.sortColumn === 'firstSeen') {
+            const aTime = a.firstSeen || 0;
+            const bTime = b.firstSeen || 0;
+            return state.sortDirection === 'asc' ? aTime - bTime : bTime - aTime;
         }
 
         if (typeof aVal === 'number' && typeof bVal === 'number') {
             return state.sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
         }
-        
+
         const aStr = String(aVal || '');
         const bStr = String(bVal || '');
         return state.sortDirection === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
     };
 
-    [favoritedOps, normalOps].forEach(arr => arr.sort(sortFunction));
+    [favoritedOpWrappers, normalOpWrappers].forEach(arr => arr.sort(sortFunction));
 
-    const finalSortedOpportunities = [...favoritedOps, ...normalOps];
+    const finalSortedOpportunities = [...favoritedOpWrappers, ...normalOpWrappers];
     let finalOpportunitiesToRender = finalSortedOpportunities;
     if (state.currentUserSubscriptionStatus === 'free') {
         finalOpportunitiesToRender = finalOpportunitiesToRender.slice(0, 10);
@@ -1017,9 +1037,10 @@ function renderOpportunitiesTable() {
 
     let tableHtml = "";
 
-    finalOpportunitiesToRender.forEach((op) => {
+    finalOpportunitiesToRender.forEach((opWrapper) => {
       try {
-        const { firstSeen } = op;
+        const op = opWrapper.data;
+        const { firstSeen } = opWrapper;
         const opKey = `${op.pair}-${op.direction}`;
         const isFavorited = state.favoritedOps.includes(opKey);
 
@@ -1119,7 +1140,7 @@ function renderOpportunitiesTable() {
     </tr>`;
       } catch (error) {
           console.error("Erro ao renderizar uma linha da tabela:", error);
-          console.error("Dados da oportunidade que causou o erro:", op);
+          console.error("Dados da oportunidade que causou o erro:", opWrapper?.data);
       }
     });
 
@@ -1127,7 +1148,7 @@ function renderOpportunitiesTable() {
     updateSortArrows();
 
     state.soundPlayedForVisibleOps.forEach(playedOpKey => {
-        if (!finalOpportunitiesToRender.some(op => `${op.pair}-${op.direction}` === playedOpKey)) {
+        if (!finalOpportunitiesToRender.some(opWrapper => `${opWrapper.data.pair}-${opWrapper.data.direction}` === playedOpKey)) {
             state.soundPlayedForVisibleOps.delete(playedOpKey);
         }
     });
@@ -1145,13 +1166,14 @@ function renderBlockedOpportunitiesTable() {
   );
   blockedOpsTableBodyEl.innerHTML = sortedBlockedOps.map(blockedOpItem => {
     const { snapshot, key: opKey } = blockedOpItem;
-    const liveOp = state.arbitrageOpportunities.find(op => (op.pair + '-' + op.direction) === opKey);
+    const liveOpWrapper = state.arbitrageOpportunities.find(opw => (opw.data.pair + '-' + opw.data.direction) === opKey);
+    const liveData = liveOpWrapper ? liveOpWrapper.data : null;
     let lucroE_display = "N/A", lucroS_display = "N/A";
     let lucroEClass = "profit-zero", lucroSClass = "profit-zero";
-    if (liveOp) {
-      lucroE_display = formatDirectProfitPercentage(liveOp.netSpreadPercentage);
-      lucroEClass = liveOp.netSpreadPercentage >= 0 ? 'profit-positive' : 'profit-negative';
-      const lucroS_val = calculateLucroS(liveOp, state.allPairsData, state.config);
+    if (liveData) {
+      lucroE_display = formatDirectProfitPercentage(liveData.netSpreadPercentage);
+      lucroEClass = liveData.netSpreadPercentage >= 0 ? 'profit-positive' : 'profit-negative';
+      const lucroS_val = calculateLucroS(liveData, state.allPairsData, state.config);
       lucroS_display = formatDirectProfitPercentage(lucroS_val);
       lucroSClass = lucroS_val === null ? 'profit-zero' : (lucroS_val >= 0 ? 'profit-positive' : 'profit-negative');
     }
@@ -1177,14 +1199,14 @@ function sortByColumn(columnKey) {
     state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
   } else {
     state.sortColumn = columnKey;
-    state.sortDirection = (['netSpreadPercentage', 'lucroS', 'volume', 'fundingRate', 'firstSeen'].includes(columnKey)) ? 'desc' : 'asc';
+    state.sortDirection = (['netSpreadPercentage', 'lucroS', 'volume', 'fundingRate'].includes(columnKey)) ? 'desc' : 'asc';
   }
   requestUiUpdate();
 }
 
 function updateSortArrows() {
   document.querySelectorAll('.sort-arrow').forEach(el => {
-    el.innerHTML = '';
+    el.innerHTML = '▼';
     el.classList.remove('active');
   });
   const arrowEl = document.getElementById(`sort-arrow-${state.sortColumn}`);
@@ -1238,9 +1260,28 @@ function connectWebSocket() {
       console.log("WebSocket conectado com sucesso!");
       state.connected = true;
       requestUiUpdate();
-      await fetchUserSubscriptionStatus();
-      renderUpgradeMessage();
-      applyFreemiumRestrictions();
+
+      try {
+          const response = await fetch("/api/users/me");
+          if (response.ok) {
+              const userData = await response.json();
+              state.currentUserSubscriptionStatus = userData.subscriptionStatus;
+              console.log("FRONTEND: Status de assinatura do usuário: ", state.currentUserSubscriptionStatus);
+              renderUpgradeMessage();
+              applyFreemiumRestrictions();
+          } else {
+              console.error("FRONTEND: Falha ao obter dados do usuário.");
+              state.currentUserSubscriptionStatus = 'free';
+              renderUpgradeMessage();
+              applyFreemiumRestrictions();
+          }
+      } catch (error) {
+          console.error("FRONTEND: Erro ao buscar dados do usuário via API:", error);
+          state.currentUserSubscriptionStatus = 'free';
+          renderUpgradeMessage();
+          applyFreemiumRestrictions();
+      }
+
       ws.send(JSON.stringify({ type: 'request_latest_data' }));
   };
 
@@ -1249,31 +1290,22 @@ function connectWebSocket() {
         const message = JSON.parse(event.data);
         state.lastUpdated = new Date();
         let UINeedsUpdate = false;
-        
         if (message.type === "opportunity") {
             const opportunityData = message.data;
-            const existingIndex = state.arbitrageOpportunities.findIndex(op => 
-                op.pair === opportunityData.pair && op.direction === opportunityData.direction
-            );
-
+            const existingIndex = state.arbitrageOpportunities.findIndex(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
             if (existingIndex > -1) {
-                state.arbitrageOpportunities[existingIndex] = opportunityData;
+                state.arbitrageOpportunities[existingIndex].data = opportunityData;
             } else {
-                state.arbitrageOpportunities.unshift(opportunityData);
+                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: Date.now() });
             }
             UINeedsUpdate = true;
-        
         } else if (message.type === "opportunities") {
-            state.arbitrageOpportunities = message.data || [];
-            UINeedsUpdate = true;
-        
+            state.arbitrageOpportunities = (message.data || []).map(d => ({data:d, firstSeen: Date.now()}));
         } else if (message.type === "all_pairs_update") {
             state.allPairsData = message.data || [];
             UINeedsUpdate = true;
         }
-
         if (UINeedsUpdate) requestUiUpdate();
-
     } catch (error) {
         console.error("FRONTEND: Erro WebSocket:", error);
     }
@@ -1381,7 +1413,7 @@ function setupEventListeners() {
 function init() {
   loadFavorites();
   loadBlockedOps();
-  loadHiddenWatchedOps();
+  loadHiddenWatchedOps(); // Carregar combinações ocultas
   loadWatchedPairs();
   applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
 
@@ -1423,7 +1455,7 @@ window.sortByColumn = sortByColumn;
 window.copiarParaClipboard = copiarParaClipboard;
 window.abrirGraficosComLayout = abrirGraficosComLayout;
 window.abrirCalculadora = abrirCalculadora;
-window.removeWatchedPair = removeWatchedPair;
+window.removeWatchedPair = removeWatchedPair; // Expor a nova função
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -1630,8 +1662,8 @@ function applyFreemiumRestrictions() {
                 feature.element.addEventListener('click', showUpgradeAlert);
                 feature.element.addEventListener('focus', showUpgradeAlert);
             } else {
-                feature.element.removeEventListener(feature.event, feature.handler);
-                feature.element.addEventListener(feature.event, showUpgradeAlert);
+                feature.element.removeEventListener(feature.event, showUpgradeAlert);
+                feature.element.addEventListener(feature.event, feature.handler);
             }
 
             if (labelElement && !labelElement.querySelector(".lock-icon")) {
