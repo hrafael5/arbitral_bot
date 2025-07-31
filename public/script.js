@@ -24,7 +24,7 @@ const state = {
   connected: false,
   lastUpdated: null,
   maxOpportunitiesToShow: 30,
-  sortColumn: 'firstSeen',
+  sortColumn: 'netSpreadPercentage',
   sortDirection: 'desc',
   filters: {
     mexcSpot: true,
