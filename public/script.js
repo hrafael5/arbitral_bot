@@ -3,7 +3,7 @@ const OPPORTUNITY_TTL_MS = 10000;
 const DEFAULT_CAPITAL_STORAGE_KEY = 'arbitrageDashboard_defaultCapital_v1';
 const MONITOR_PARES_EXPANDED_KEY = 'arbitrageDashboard_monitorParesExpanded_v1';
 const WATCHED_PAIRS_EXPANDED_KEY = 'arbitrageDashboard_watchedPairsExpanded_v1';
-const HIDDEN_WATCHED_OPS_STORAGE_KEY = 'arbitrageDashboard_hiddenWatchedOps_v1'; // Nova chave para localStorage
+const HIDDEN_WATCHED_OPS_STORAGE_KEY = 'arbitrageDashboard_hiddenWatchedOps_v1';
 
 const state = {
   allPairsData: [],
@@ -41,7 +41,7 @@ const state = {
   favoritedOps: [],
   blockedOps: [],
   watchedPairsList: [],
-  hiddenWatchedOps: new Set(), // Alterado para Set para melhor performance
+  hiddenWatchedOps: new Set(),
   soundEnabled: false,
   soundPermissionGranted: false,
   soundProfitThreshold: 0.0,
@@ -986,14 +986,14 @@ function renderOpportunitiesTable() {
             return state.sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
         }
 
-        const aVal = a.data[state.sortColumn];
-        const bVal = b.data[state.sortColumn];
-
         if (state.sortColumn === 'firstSeen') {
             const aTime = a.firstSeen || 0;
             const bTime = b.firstSeen || 0;
             return state.sortDirection === 'asc' ? aTime - bTime : bTime - aTime;
         }
+
+        const aVal = a.data[state.sortColumn];
+        const bVal = b.data[state.sortColumn];
 
         if (typeof aVal === 'number' && typeof bVal === 'number') {
             return state.sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
@@ -1671,6 +1671,22 @@ function applyFreemiumRestrictions() {
     });
 }
 
+async function fetchUserSubscriptionStatus() {
+    try {
+        const response = await fetch("/api/users/me");
+        if (response.ok) {
+            const userData = await response.json();
+            state.currentUserSubscriptionStatus = userData.subscriptionStatus;
+            console.log("FRONTEND: Status de assinatura do usuário carregado: ", state.currentUserSubscriptionStatus);
+        } else {
+            console.error("FRONTEND: Falha ao buscar status de assinatura do usuário: ", response.status, response.statusText);
+            state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro
+        }
+    } catch (error) {
+        console.error("FRONTEND: Erro ao conectar com a API para buscar status de assinatura: ", error);
+        state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro de rede
+    }
+}
 async function fetchUserSubscriptionStatus() {
     try {
         const response = await fetch("/api/users/me");

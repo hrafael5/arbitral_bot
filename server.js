@@ -57,10 +57,6 @@ function createLoggerWithWSS(wssInstance, currentConfig) {
     };
 }
 
-// ##########################################################################
-// ### ALTERAÇÃO PRINCIPAL ABAIXO ###
-// ##########################################################################
-
 class WebSocketOpportunitySignaler extends OpportunitySignaler {
     constructor(sigConfig, signalerLogger, wssInstance) {
         super(sigConfig, signalerLogger);
@@ -94,11 +90,6 @@ class WebSocketOpportunitySignaler extends OpportunitySignaler {
         return this.opportunities; 
     }
 }
-
-// ##########################################################################
-// ### FIM DA ALTERAÇÃO PRINCIPAL ###
-// ##########################################################################
-
 
 async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
     if (!connector) return [];
