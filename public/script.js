@@ -1,4 +1,4 @@
-// --- ESTADO INICIAL E SELETORES DOM ---
+// --- ESTADO INICIAL E SELETORES DOM  ---
 const OPPORTUNITY_TTL_MS = 10000;
 const DEFAULT_CAPITAL_STORAGE_KEY = 'arbitrageDashboard_defaultCapital_v1';
 const MONITOR_PARES_EXPANDED_KEY = 'arbitrageDashboard_monitorParesExpanded_v1';
