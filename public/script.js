@@ -24,7 +24,7 @@ const state = {
   connected: false,
   lastUpdated: null,
   maxOpportunitiesToShow: 30,
-  sortColumn: 'netSpreadPercentage',
+  sortColumn: 'firstSeen',
   sortDirection: 'desc',
   filters: {
     mexcSpot: true,
@@ -134,33 +134,8 @@ const filterFundingMinInput = document.getElementById('filter-funding-min');
 const filterFundingMaxInput = document.getElementById('filter-funding-max');
 
 let uiUpdateScheduled = false;
-function updateOpportunityTimeAgo() {
-  document.querySelectorAll(".time-cell[data-timestamp]").forEach(cell => {
-    const timestamp = parseInt(cell.dataset.timestamp);
-    if (!isNaN(timestamp)) {
-      cell.textContent = formatTimeAgo(timestamp);
-    }
-  });
-}
-
-setInterval(updateOpportunityTimeAgo, 1000); // Atualiza a cada segundo
+const UI_UPDATE_INTERVAL_MS = 200;
 let ws = null;
-
-function formatTimeAgo(timestamp) {
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
-
-    let interval = seconds / 31536000; // years
-    if (interval > 1) return Math.floor(interval) + "a";
-    interval = seconds / 2592000; // months
-    if (interval > 1) return Math.floor(interval) + "m";
-    interval = seconds / 86400; // days
-    if (interval > 1) return Math.floor(interval) + "d";
-    interval = seconds / 3600; // hours
-    if (interval > 1) return Math.floor(interval) + "h";
-    interval = seconds / 60; // minutes
-    if (interval > 1) return Math.floor(interval) + "min";
-    return Math.floor(seconds) + "s";
-}
 
 function escapeHTML(str) {
     if (typeof str !== 'string') return '';
@@ -289,7 +264,7 @@ function setCurrentView(view) {
     filterGroupLucroE.style.display = 'none';
     filterGroupLucroS.style.display = 'flex';
   } else {
-    state.sortColumn = 'netSpreadPercentage';
+    state.sortColumn = 'firstSeen';
     state.sortDirection = 'desc';
     filterGroupLucroE.style.display = 'flex';
     filterGroupLucroS.style.display = 'none';
@@ -662,9 +637,7 @@ function unblockOpportunity(opKeyToUnblock) {
 function requestUiUpdate() {
   if (state.isPaused || uiUpdateScheduled) return;
   uiUpdateScheduled = true;
-  // Chamada imediata, já que o setInterval lida com a atualização periódica
-  updateAllUI();
-  uiUpdateScheduled = false; // Resetar imediatamente, pois a atualização é síncrona
+  setTimeout(updateAllUI, UI_UPDATE_INTERVAL_MS);
 }
 
 function updateAllUI() {
@@ -954,7 +927,7 @@ function renderWatchedPairsTable() {
                         <td><div class="profit-cell ${lucroSClass}">${formatDirectProfitPercentage(lucroS_percent)}</div></td>
                         <td><div class="volume-cell">${volumeDisplay}</div></td>
                         <td><div class="funding-cell ${fundingRateClass}">${fundingRateDisplay}</div></td>
-                        <td><div class="time-cell" data-timestamp="${op.firstSeen}">${timeAgo}</div></td>
+                        <td><div class="time-cell">${timeAgo}</div></td>
                     </tr>
                 `;
             });
