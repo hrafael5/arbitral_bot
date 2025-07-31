@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/user.model'); // Aceder ao nosso modelo de utilizador
+const User = require('../models/user.model');
 require('dotenv').config();
 
-// Serviços de email melhorados
+// Serviços de email
 const { sendWelcomeEmail, sendPremiumUpgradeEmail } = require('../utils/emailService');
 
 // Inicializar o Stripe com a sua chave secreta do .env
@@ -16,20 +16,17 @@ function generateStrongTempPassword() {
     const numbers = '0123456789';
     const symbols = '!@#$%&*';
     
-    // Garantir pelo menos um caractere de cada tipo
     let password = '';
     password += lowercase[Math.floor(Math.random() * lowercase.length)];
     password += uppercase[Math.floor(Math.random() * uppercase.length)];
     password += numbers[Math.floor(Math.random() * numbers.length)];
     password += symbols[Math.floor(Math.random() * symbols.length)];
     
-    // Adicionar mais caracteres aleatórios para completar 12 caracteres
     const allChars = lowercase + uppercase + numbers + symbols;
     for (let i = 4; i < 12; i++) {
         password += allChars[Math.floor(Math.random() * allChars.length)];
     }
     
-    // Embaralhar a senha
     return password.split('').sort(() => Math.random() - 0.5).join('');
 }
 
@@ -37,47 +34,34 @@ function generateStrongTempPassword() {
 function convertStripeTimestamp(timestamp) {
     try {
         if (!timestamp || isNaN(timestamp)) {
-            console.log(`⚠️ Timestamp inválido recebido: ${timestamp}`);
-            // Retorna data padrão de 30 dias a partir de agora
+            // Retorna data padrão de 30 dias a partir de agora em caso de erro
             return new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
         }
-        
         const date = new Date(timestamp * 1000);
-        
-        // Verificar se a data é válida
         if (isNaN(date.getTime())) {
-            console.log(`⚠️ Data inválida gerada do timestamp: ${timestamp}`);
-            // Retorna data padrão de 30 dias a partir de agora
             return new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
         }
-        
-        console.log(`✅ Data convertida com sucesso: ${date.toISOString()}`);
         return date;
     } catch (error) {
         console.error(`❌ Erro ao converter timestamp ${timestamp}:`, error);
-        // Retorna data padrão de 30 dias a partir de agora
         return new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
     }
 }
 
-// ROTA 1: CRIAR A SESSÃO DE CHECKOUT (Permite utilizadores não logados)
+// ROTA 1: CRIAR A SESSÃO DE CHECKOUT
 router.post('/create-checkout-session', async (req, res) => {
     try {
-        const priceId = 'price_1Rlxp7LUk7QOPN8ooQoUqbQ7'; // O seu ID de preço
+        const priceId = process.env.STRIPE_PRICE_ID; // Usar variável de ambiente para o ID do preço
 
         const sessionPayload = {
             payment_method_types: ['card'],
             mode: 'subscription',
-            line_items: [{
-                price: priceId,
-                quantity: 1,
-            }],
+            line_items: [{ price: priceId, quantity: 1 }],
             success_url: `${process.env.APP_BASE_URL || 'https://app.arbflash.com'}?payment_success=true`,
             cancel_url: `${process.env.APP_BASE_URL || 'https://app.arbflash.com'}?payment_canceled=true`,
             metadata: {}
         };
 
-        // Se o utilizador JÁ ESTIVER LOGADO, pré-preenchemos o email e guardamos o ID dele
         if (req.session && req.session.userId) {
             const user = await User.findByPk(req.session.userId);
             if (user) {
@@ -87,7 +71,6 @@ router.post('/create-checkout-session', async (req, res) => {
         }
 
         const session = await stripe.checkout.sessions.create(sessionPayload);
-
         res.json({ sessionId: session.id });
 
     } catch (error) {
@@ -97,7 +80,7 @@ router.post('/create-checkout-session', async (req, res) => {
 });
 
 
-// ROTA 2: RECEBER OS WEBHOOKS DO STRIPE (Cria ou atualiza utilizador) - MELHORADA
+// ROTA 2: RECEBER OS WEBHOOKS DO STRIPE
 router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -120,23 +103,12 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
             const stripeCustomerId = session.customer;
             const stripeSubscriptionId = session.subscription;
             
-            // O email que o cliente digitou no checkout do Stripe
             const customerEmail = session.customer_details.email.toLowerCase();
             const customerName = session.customer_details.name || 'Novo Assinante';
             
-            console.log(`📧 Processando pagamento para: ${customerEmail}`);
-            console.log(`👤 Nome do cliente: ${customerName}`);
-            console.log(`🆔 Customer ID: ${stripeCustomerId}`);
-            console.log(`📋 Subscription ID: ${stripeSubscriptionId}`);
-
             try {
                 const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-                console.log(`📅 Current period end (timestamp): ${subscription.current_period_end}`);
-
-                // Verificar se o utilizador já existe na nossa base de dados
                 let user = await User.findOne({ where: { email: customerEmail } });
-
-                // Converter timestamp para data válida
                 const periodEndDate = convertStripeTimestamp(subscription.current_period_end);
 
                 const userData = {
@@ -147,40 +119,25 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
                     stripeCurrentPeriodEnd: periodEndDate
                 };
 
-                console.log(`📋 Dados do usuário a serem salvos:`, {
-                    ...userData,
-                    stripeCurrentPeriodEnd: userData.stripeCurrentPeriodEnd.toISOString()
-                });
-
                 if (user) {
-                    // USUÁRIO EXISTENTE: Atualiza para premium e envia e-mail de parabéns
                     await user.update(userData);
                     console.log(`✅ Assinatura ativada para o utilizador existente: ${user.id}`);
-                    
-                    // NOVO: Enviar e-mail de parabéns pelo upgrade
                     try {
                         await sendPremiumUpgradeEmail(user.email, user.name);
-                        console.log(`🎉 E-mail de parabéns (upgrade premium) enviado para: ${user.email}`);
+                        console.log(`🎉 E-mail de upgrade premium enviado para: ${user.email}`);
                     } catch (err) {
-                        console.error(`❌ Falha ao enviar e-mail de parabéns para ${user.email}:`, err);
+                        console.error(`❌ Falha ao enviar e-mail de upgrade para ${user.email}:`, err);
                     }
-                    
                 } else {
-                    // USUÁRIO NOVO: Cria conta premium e envia e-mail de boas-vindas premium
                     const tempPassword = generateStrongTempPassword();
-                    console.log(`🔐 Senha temporária gerada: ${tempPassword}`);
-
                     user = await User.create({
                         email: customerEmail,
                         name: customerName,
-                        password: tempPassword, // O hook do modelo irá encriptar
-                        emailVerified: true, // Consideramos o email verificado, pois ele pagou
+                        password: tempPassword,
+                        emailVerified: true,
                         ...userData
                     });
-                    
                     console.log(`✅ Novo utilizador premium criado: ${user.id}`);
-                    
-                    // Enviar email de boas‑vindas premium (com link para definir senha)
                     try {
                         await sendWelcomeEmail(customerEmail);
                         console.log(`📧 E-mail de boas‑vindas premium enviado para ${customerEmail}`);
@@ -195,44 +152,29 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
             break;
         }
 
-        case 'customer.subscription.updated': {
-            const subscription = event.data.object;
-            const stripeCustomerId = subscription.customer;
-
-            try {
-                // Converter timestamp para data válida
-                const periodEndDate = convertStripeTimestamp(subscription.current_period_end);
-
-                await User.update({
-                    subscriptionStatus: subscription.status,
-                    stripePriceId: subscription.items.data[0].price.id,
-                    stripeCurrentPeriodEnd: periodEndDate
-                }, {
-                    where: { stripeCustomerId: stripeCustomerId }
-                });
-                
-                console.log(`🔄 Assinatura atualizada para o cliente ${stripeCustomerId}. Novo status: ${subscription.status}.`);
-            } catch (error) {
-                console.error(`❌ Erro ao atualizar assinatura:`, error);
-            }
-            break;
-        }
-        
+        case 'customer.subscription.updated':
         case 'customer.subscription.deleted': {
             const subscription = event.data.object;
             const stripeCustomerId = subscription.customer;
 
+            // LÓGICA DE DOWNGRADE AUTOMÁTICO
+            let newStatus = 'free'; // Padrão é reverter para 'free'
+            if (subscription.status === 'active' || subscription.status === 'trialing') {
+                newStatus = 'active'; // Apenas 'active' ou 'trialing' são considerados premium
+            }
+
+            console.log(`🔄 Assinatura atualizada para o cliente ${stripeCustomerId}. Status no Stripe: ${subscription.status}. Status no sistema será: ${newStatus}.`);
+
             try {
                 await User.update({
-                    subscriptionStatus: 'canceled',
-                    stripeSubscriptionId: null,
+                    subscriptionStatus: newStatus,
+                    stripePriceId: subscription.items.data[0]?.price.id,
+                    stripeCurrentPeriodEnd: convertStripeTimestamp(subscription.current_period_end)
                 }, {
                     where: { stripeCustomerId: stripeCustomerId }
                 });
-
-                console.log(`🚫 Assinatura cancelada para o cliente ${stripeCustomerId}.`);
             } catch (error) {
-                console.error(`❌ Erro ao cancelar assinatura:`, error);
+                console.error(`❌ Erro ao atualizar/deletar assinatura:`, error);
             }
             break;
         }
@@ -245,4 +187,3 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
 });
 
 module.exports = router;
-
