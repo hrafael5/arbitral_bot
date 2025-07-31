@@ -264,7 +264,7 @@ function setCurrentView(view) {
     filterGroupLucroE.style.display = 'none';
     filterGroupLucroS.style.display = 'flex';
   } else {
-    state.sortColumn = 'firstSeen';
+    state.sortColumn = 'netSpreadPercentage';
     state.sortDirection = 'desc';
     filterGroupLucroE.style.display = 'flex';
     filterGroupLucroS.style.display = 'none';
@@ -1242,9 +1242,11 @@ function connectWebSocket() {
       console.log("WebSocket conectado com sucesso!");
       state.connected = true;
       requestUiUpdate();
+
       await fetchUserSubscriptionStatus();
       renderUpgradeMessage();
       applyFreemiumRestrictions();
+
       ws.send(JSON.stringify({ type: 'request_latest_data' }));
   };
 
@@ -1253,31 +1255,22 @@ function connectWebSocket() {
         const message = JSON.parse(event.data);
         state.lastUpdated = new Date();
         let UINeedsUpdate = false;
-        
         if (message.type === "opportunity") {
             const opportunityData = message.data;
-            const existingIndex = state.arbitrageOpportunities.findIndex(op => 
-                op.pair === opportunityData.pair && op.direction === opportunityData.direction
-            );
-
+            const existingIndex = state.arbitrageOpportunities.findIndex(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
             if (existingIndex > -1) {
-                state.arbitrageOpportunities[existingIndex] = opportunityData;
+                state.arbitrageOpportunities[existingIndex].data = opportunityData;
             } else {
-                state.arbitrageOpportunities.unshift(opportunityData);
+                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: Date.now() });
             }
             UINeedsUpdate = true;
-        
         } else if (message.type === "opportunities") {
-            state.arbitrageOpportunities = message.data || [];
-            UINeedsUpdate = true;
-        
+            state.arbitrageOpportunities = (message.data || []).map(d => ({data:d, firstSeen: Date.now()}));
         } else if (message.type === "all_pairs_update") {
             state.allPairsData = message.data || [];
             UINeedsUpdate = true;
         }
-
         if (UINeedsUpdate) requestUiUpdate();
-
     } catch (error) {
         console.error("FRONTEND: Erro WebSocket:", error);
     }
