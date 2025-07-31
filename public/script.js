@@ -1,4 +1,4 @@
-// --- ESTADO INICIAL E SELETORES DOM  ---
+// --- ESTADO INICIAL E SELETORES DOM ---
 const OPPORTUNITY_TTL_MS = 10000;
 const DEFAULT_CAPITAL_STORAGE_KEY = 'arbitrageDashboard_defaultCapital_v1';
 const MONITOR_PARES_EXPANDED_KEY = 'arbitrageDashboard_monitorParesExpanded_v1';
@@ -24,7 +24,7 @@ const state = {
   connected: false,
   lastUpdated: null,
   maxOpportunitiesToShow: 30,
-  sortColumn: 'netSpreadPercentage',
+  sortColumn: 'firstSeen',
   sortDirection: 'desc',
   filters: {
     mexcSpot: true,
@@ -264,7 +264,7 @@ function setCurrentView(view) {
     filterGroupLucroE.style.display = 'none';
     filterGroupLucroS.style.display = 'flex';
   } else {
-    state.sortColumn = 'netSpreadPercentage';
+    state.sortColumn = 'firstSeen';
     state.sortDirection = 'desc';
     filterGroupLucroE.style.display = 'flex';
     filterGroupLucroS.style.display = 'none';
@@ -1242,11 +1242,9 @@ function connectWebSocket() {
       console.log("WebSocket conectado com sucesso!");
       state.connected = true;
       requestUiUpdate();
-
       await fetchUserSubscriptionStatus();
       renderUpgradeMessage();
       applyFreemiumRestrictions();
-
       ws.send(JSON.stringify({ type: 'request_latest_data' }));
   };
 
@@ -1255,22 +1253,31 @@ function connectWebSocket() {
         const message = JSON.parse(event.data);
         state.lastUpdated = new Date();
         let UINeedsUpdate = false;
+        
         if (message.type === "opportunity") {
             const opportunityData = message.data;
-            const existingIndex = state.arbitrageOpportunities.findIndex(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
+            const existingIndex = state.arbitrageOpportunities.findIndex(op => 
+                op.pair === opportunityData.pair && op.direction === opportunityData.direction
+            );
+
             if (existingIndex > -1) {
-                state.arbitrageOpportunities[existingIndex].data = opportunityData;
+                state.arbitrageOpportunities[existingIndex] = opportunityData;
             } else {
-                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: Date.now() });
+                state.arbitrageOpportunities.unshift(opportunityData);
             }
             UINeedsUpdate = true;
+        
         } else if (message.type === "opportunities") {
-            state.arbitrageOpportunities = (message.data || []).map(d => ({data:d, firstSeen: Date.now()}));
+            state.arbitrageOpportunities = message.data || [];
+            UINeedsUpdate = true;
+        
         } else if (message.type === "all_pairs_update") {
             state.allPairsData = message.data || [];
             UINeedsUpdate = true;
         }
+
         if (UINeedsUpdate) requestUiUpdate();
+
     } catch (error) {
         console.error("FRONTEND: Erro WebSocket:", error);
     }
