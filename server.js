@@ -5,7 +5,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const helmet = require('helmet'); // Adicionado para segurança
+const helmet = require('helmet');
 const compression = require('compression');
 const ini = require('ini');
 const fs = require('fs');
@@ -57,6 +57,10 @@ function createLoggerWithWSS(wssInstance, currentConfig) {
     };
 }
 
+// ##########################################################################
+// ### ALTERAÇÃO PRINCIPAL ABAIXO ###
+// ##########################################################################
+
 class WebSocketOpportunitySignaler extends OpportunitySignaler {
     constructor(sigConfig, signalerLogger, wssInstance) {
         super(sigConfig, signalerLogger);
@@ -66,14 +70,35 @@ class WebSocketOpportunitySignaler extends OpportunitySignaler {
     }
     signal(opportunity) {
         super.signal(opportunity);
+
+        // --- LÓGICA CORRIGIDA PARA O TIMESTAMP 'firstSeen' ---
         const existingIndex = this.opportunities.findIndex(op => op.pair === opportunity.pair && op.direction === opportunity.direction);
-        if (existingIndex > -1) this.opportunities.splice(existingIndex, 1);
-        this.opportunities.unshift(opportunity);
-        if (this.opportunities.length > this.maxOpportunities) this.opportunities.pop();
+        
+        if (existingIndex > -1) {
+            // Se a oportunidade já existe, nós preservamos o timestamp original dela.
+            opportunity.firstSeen = this.opportunities[existingIndex].firstSeen;
+            this.opportunities[existingIndex] = opportunity; // Atualiza com os novos dados de mercado
+        } else {
+            // Se for uma oportunidade nova, nós criamos um novo timestamp.
+            opportunity.firstSeen = Date.now();
+            this.opportunities.unshift(opportunity);
+            if (this.opportunities.length > this.maxOpportunities) {
+                this.opportunities.pop();
+            }
+        }
+
+        // Envia para os clientes a oportunidade já com o timestamp 'firstSeen' correto.
         broadcastToClients(this.wss, { type: 'opportunity', data: opportunity });
     }
-    getOpportunities() { return this.opportunities; }
+    getOpportunities() { 
+        return this.opportunities; 
+    }
 }
+
+// ##########################################################################
+// ### FIM DA ALTERAÇÃO PRINCIPAL ###
+// ##########################################################################
+
 
 async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
     if (!connector) return [];
@@ -342,7 +367,6 @@ sequelize.sync({ alter: true })
         const PORT = process.env.PORT || 3000;
         server.listen(PORT, () => {
             logger.info(`Server listening on port ${PORT}.`);
-            // CORREÇÃO: Garantir que o bot seja inicializado
             initializeAndStartBot();
         });
     })

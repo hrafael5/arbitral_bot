@@ -215,7 +215,6 @@ function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false
 }
 
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
-    // 1. Parse dos dados da oportunidade
     let opDataToUse = null;
     if (typeof opDataForCopyStr === 'string' && opDataForCopyStr) {
         try {
@@ -225,7 +224,6 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
-    // 2. Calcular e copiar o valor primeiro, enquanto a página principal tem foco
     if (opDataToUse && opDataToUse.buyPrice && state.defaultCapitalUSD > 0) {
         const buyPrice = parseFloat(opDataToUse.buyPrice);
         if (buyPrice > 0) {
@@ -237,9 +235,7 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
-    // 3. Abrir todas as janelas o mais rápido possível, sem pausas
     abrirCalculadora(pair, direction, buyExchange, sellExchange);
-
     let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
     let urlLeg2 = getExchangeUrl(sellExchange, sellInstrument, pair);
     
@@ -314,8 +310,7 @@ function toggleBlockedOps() {
 }
 
 function getFilteredOpportunities() {
-    let opportunities = state.arbitrageOpportunities.filter(opWrapper => {
-        const op = opWrapper.data;
+    let opportunities = state.arbitrageOpportunities.filter(op => {
         if (state.watchedPairsList.includes(op.pair)) return false;
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
 
@@ -379,7 +374,7 @@ function getFilteredOpportunities() {
     });
 
     if (state.currentUserSubscriptionStatus === 'free') {
-        opportunities = opportunities.filter(opWrapper => opWrapper.data.netSpreadPercentage < 1.0);
+        opportunities = opportunities.filter(op => op.netSpreadPercentage < 1.0);
     }
 
     return opportunities;
@@ -519,7 +514,6 @@ function saveBlockedOps() {
   localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(state.blockedOps));
 }
 
-// --- Funções para gerenciar combinações ocultas no localStorage ---
 function loadHiddenWatchedOps() {
     const stored = localStorage.getItem(HIDDEN_WATCHED_OPS_STORAGE_KEY);
     state.hiddenWatchedOps = stored ? new Set(JSON.parse(stored)) : new Set();
@@ -591,14 +585,12 @@ function addWatchedPair() {
   }
 }
 
-// Nova função para remover um par vigiado completamente
 async function removeWatchedPair(pairToRemove) {
     if (confirm(`Tem certeza que deseja remover o par ${pairToRemove} da sua lista de pares vigiados?`)) {
         state.watchedPairsList = state.watchedPairsList.filter(pair => pair !== pairToRemove);
-        // Remover também as combinações ocultas relacionadas a este par
         state.hiddenWatchedOps = new Set(Array.from(state.hiddenWatchedOps).filter(opKey => !opKey.startsWith(`${pairToRemove}|`)));
         saveHiddenWatchedOps();
-        await saveWatchedPairs(); // Salva a lista atualizada no servidor
+        await saveWatchedPairs();
         requestUiUpdate();
     }
 }
@@ -656,7 +648,7 @@ function updateAllUI() {
   renderBlockedOpportunitiesTable();
   renderWatchedPairsTable();
   updateMainTitle();
-  updateWatchedPairsCount(); // Atualiza o contador de pares vigiados
+  updateWatchedPairsCount();
 }
 
 function updateGlobalUIState() {
@@ -841,14 +833,13 @@ function renderWatchedPairsTable() {
     let tableHtml = "";
     let combinationsFound = 0;
 
-    // Agrupar oportunidades por par para renderizar o cabeçalho do par uma vez
     const opportunitiesByPair = state.watchedPairsList.reduce((acc, pair) => {
         acc[pair] = state.arbitrageOpportunities.filter(opWrapper => {
             const op = opWrapper.data;
             if (op.pair !== pair) return false;
 
-            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; // Chave mais específica
-            if (state.hiddenWatchedOps.has(opKey)) { // Usar o Set de hiddenWatchedOps
+            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
+            if (state.hiddenWatchedOps.has(opKey)) {
                 return false;
             }
 
@@ -887,7 +878,6 @@ function renderWatchedPairsTable() {
             combinationsFound += opportunitiesForPair.length;
             const escapedPair = escapeHTML(pair);
 
-            // Adicionar o cabeçalho do par com o novo botão 'Remover Par'
             tableHtml += `
                 <tr class="watched-pair-header-row">
                     <td colspan="8">
@@ -905,7 +895,7 @@ function renderWatchedPairsTable() {
                 const lucroS_percent = calculateLucroS(op, state.allPairsData, state.config);
                 const lucroEClass = lucroE_percent >= 0 ? 'profit-positive' : 'profit-negative';
                 const lucroSClass = lucroS_percent === null ? 'profit-zero' : (lucroS_percent >= 0 ? 'profit-positive' : 'profit-negative');
-                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; // Chave mais específica
+                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
 
                 let volumeDisplay, fundingRateDisplay, fundingRateClass = 'profit-zero';
                  if (op.type === "INTER_EXCHANGE_FUT_FUT") {
@@ -954,7 +944,6 @@ function renderWatchedPairsTable() {
 
     watchedPairsTableBodyEl.innerHTML = tableHtml;
 
-    // Adicionar event listeners para os botões de ocultar
     document.querySelectorAll('.hide-watched-op-button').forEach(button => {
         button.addEventListener('click', function() {
             const keyToHide = this.dataset.opKey;
@@ -962,7 +951,6 @@ function renderWatchedPairsTable() {
         });
     });
 
-    // Adicionar event listeners para os novos botões de remover par
     document.querySelectorAll('.remove-pair-button').forEach(button => {
         button.addEventListener('click', function() {
             const pairToRemove = this.dataset.pair;
@@ -1261,26 +1249,9 @@ function connectWebSocket() {
       state.connected = true;
       requestUiUpdate();
 
-      try {
-          const response = await fetch("/api/users/me");
-          if (response.ok) {
-              const userData = await response.json();
-              state.currentUserSubscriptionStatus = userData.subscriptionStatus;
-              console.log("FRONTEND: Status de assinatura do usuário: ", state.currentUserSubscriptionStatus);
-              renderUpgradeMessage();
-              applyFreemiumRestrictions();
-          } else {
-              console.error("FRONTEND: Falha ao obter dados do usuário.");
-              state.currentUserSubscriptionStatus = 'free';
-              renderUpgradeMessage();
-              applyFreemiumRestrictions();
-          }
-      } catch (error) {
-          console.error("FRONTEND: Erro ao buscar dados do usuário via API:", error);
-          state.currentUserSubscriptionStatus = 'free';
-          renderUpgradeMessage();
-          applyFreemiumRestrictions();
-      }
+      await fetchUserSubscriptionStatus();
+      renderUpgradeMessage();
+      applyFreemiumRestrictions();
 
       ws.send(JSON.stringify({ type: 'request_latest_data' }));
   };
@@ -1413,7 +1384,7 @@ function setupEventListeners() {
 function init() {
   loadFavorites();
   loadBlockedOps();
-  loadHiddenWatchedOps(); // Carregar combinações ocultas
+  loadHiddenWatchedOps();
   loadWatchedPairs();
   applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
 
@@ -1455,7 +1426,7 @@ window.sortByColumn = sortByColumn;
 window.copiarParaClipboard = copiarParaClipboard;
 window.abrirGraficosComLayout = abrirGraficosComLayout;
 window.abrirCalculadora = abrirCalculadora;
-window.removeWatchedPair = removeWatchedPair; // Expor a nova função
+window.removeWatchedPair = removeWatchedPair;
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -1716,25 +1687,3 @@ async function fetchUserSubscriptionStatus() {
         state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro de rede
     }
 }
-
-
-
-
-async function fetchUserSubscriptionStatus() {
-    try {
-        const response = await fetch("/api/users/me");
-        if (response.ok) {
-            const userData = await response.json();
-            state.currentUserSubscriptionStatus = userData.subscriptionStatus;
-            console.log("FRONTEND: Status de assinatura do usuário carregado: ", state.currentUserSubscriptionStatus);
-        } else {
-            console.error("FRONTEND: Falha ao buscar status de assinatura do usuário: ", response.status, response.statusText);
-            state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro
-        }
-    } catch (error) {
-        console.error("FRONTEND: Erro ao conectar com a API para buscar status de assinatura: ", error);
-        state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro de rede
-    }
-}
-
-
