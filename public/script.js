@@ -784,7 +784,7 @@ function calculateLucroS(op, allMarketData, config) {
     feeForBuyExit = parseFloat(configBuyExit.spotMakerFee);
   } else {
     priceToBuyForExit = marketDataForBuyExit.futuresPrice;
-    feeForBuyExit = parseFloat(configBuyExit.futuresMakerFee);
+    feeForBuyExit = parseFloat(configBuyExit.spotMakerFee);
   }
   if (typeof priceToBuyForExit !=='number' || isNaN(priceToBuyForExit) || priceToBuyForExit <= 0 || typeof priceToSellForExit !=='number' || isNaN(priceToSellForExit) || isNaN(feeForBuyExit) || isNaN(feeForSellExit)) return null;
   const grossSpreadExitDecimal = (priceToSellForExit / priceToBuyForExit) - 1;
@@ -978,23 +978,19 @@ function renderOpportunitiesTable() {
     });
 
     const sortFunction = (a, b) => {
+        let aVal, bVal;
         if (state.sortColumn === 'lucroS') {
-            const aVal = calculateLucroS(a, state.allPairsData, state.config) || -Infinity;
-            const bVal = calculateLucroS(b, state.allPairsData, state.config) || -Infinity;
-            return state.sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-        }
-
-        const aVal = a[state.sortColumn];
-        const bVal = b[state.sortColumn];
-
-        if (state.sortColumn === 'firstSeen') {
-            return state.sortDirection === 'asc' ? (aVal || 0) - (bVal || 0) : (bVal || 0) - (aVal || 0);
+            aVal = calculateLucroS(a, state.allPairsData, state.config) || -Infinity;
+            bVal = calculateLucroS(b, state.allPairsData, state.config) || -Infinity;
+        } else {
+            aVal = a[state.sortColumn];
+            bVal = b[state.sortColumn];
         }
 
         if (typeof aVal === 'number' && typeof bVal === 'number') {
             return state.sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
         }
-
+        
         const aStr = String(aVal || '');
         const bStr = String(bVal || '');
         return state.sortDirection === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
@@ -1670,37 +1666,4 @@ function applyFreemiumRestrictions() {
             }
         }
     });
-}
-
-async function fetchUserSubscriptionStatus() {
-    try {
-        const response = await fetch("/api/users/me");
-        if (response.ok) {
-            const userData = await response.json();
-            state.currentUserSubscriptionStatus = userData.subscriptionStatus;
-            console.log("FRONTEND: Status de assinatura do usuário carregado: ", state.currentUserSubscriptionStatus);
-        } else {
-            console.error("FRONTEND: Falha ao buscar status de assinatura do usuário: ", response.status, response.statusText);
-            state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro
-        }
-    } catch (error) {
-        console.error("FRONTEND: Erro ao conectar com a API para buscar status de assinatura: ", error);
-        state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro de rede
-    }
-}
-async function fetchUserSubscriptionStatus() {
-    try {
-        const response = await fetch("/api/users/me");
-        if (response.ok) {
-            const userData = await response.json();
-            state.currentUserSubscriptionStatus = userData.subscriptionStatus;
-            console.log("FRONTEND: Status de assinatura do usuário carregado: ", state.currentUserSubscriptionStatus);
-        } else {
-            console.error("FRONTEND: Falha ao buscar status de assinatura do usuário: ", response.status, response.statusText);
-            state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro
-        }
-    } catch (error) {
-        console.error("FRONTEND: Erro ao conectar com a API para buscar status de assinatura: ", error);
-        state.currentUserSubscriptionStatus = "free"; // Fallback para 'free' em caso de erro de rede
-    }
 }
