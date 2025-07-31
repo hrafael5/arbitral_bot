@@ -55,6 +55,51 @@ const state = {
   currentUserSubscriptionStatus: null
 };
 
+// --- INÍCIO DA INJEÇÃO DE DADOS DE DEMONSTRAÇÃO ---
+state.arbitrageOpportunities = [
+  {
+    id: "DEMO_BTC_USDT_MEXC_GATEIO",
+    data: {
+      pair: "BTC/USDT",
+      direction: "MEXC_SPOT/GATEIO_FUTURES",
+      netSpreadPercentage: 0.85,
+      buyExchange: "MEXC",
+      buyInstrument: "SPOT",
+      buyPrice: 60000.00,
+      sellExchange: "GATEIO",
+      sellInstrument: "FUTURES",
+      sellPrice: 60510.00,
+      spotVolume24hUSD: 100000000,
+      futuresVolume24hUSD: 500000000,
+      fundingRate: 0.0001,
+      timestamp: Date.now()
+    },
+    lastUpdated: Date.now()
+  }
+];
+
+state.allPairsData = [
+  {
+    pair: "BTC/USDT",
+    exchange: "MEXC",
+    spotPrice: 60000.00,
+    futuresPrice: 60050.00,
+    spotBid: 59990.00,
+    futuresBid: 60040.00
+  },
+  {
+    pair: "BTC/USDT",
+    exchange: "GATEIO",
+    spotPrice: 60400.00,
+    futuresPrice: 60510.00,
+    spotBid: 60390.00,
+    futuresBid: 60500.00
+  }
+];
+
+state.currentUserSubscriptionStatus = 'premium'; // Simula um usuário premium para habilitar todos os recursos
+// --- FIM DA INJEÇÃO DE DADOS DE DEMONSTRAÇÃO ---
+
 window.frontendState = state;
 
 const FAVORITES_STORAGE_KEY = 'arbitrageDashboard_favoritedOps_v1';
