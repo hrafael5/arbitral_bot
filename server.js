@@ -1,5 +1,3 @@
-// server.js (Revisado)
-
 // A linha abaixo deve ser a PRIMEIRA LINHA do seu ficheiro
 require('dotenv').config();
 
@@ -7,7 +5,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const helmet = require('helmet'); // <-- ADICIONADO para segurança
+const helmet = require('helmet'); // Adicionado para segurança
 const compression = require('compression');
 const ini = require('ini');
 const fs = require('fs');
@@ -19,20 +17,18 @@ const User = require('./models/user.model');
 const UserConfiguration = require('./models/userConfiguration.model');
 const SequelizeStore = require("connect-session-sequelize")(session.Store);
 
-// Dependências da lógica do Bot
 const MEXCConnector = require('./lib/MEXCConnector');
 const GateConnector = require('./lib/GateConnector');
 const MarketMonitor = require('./lib/MarketMonitor');
 const ArbitrageEngine = require('./lib/ArbitrageEngine');
 const OpportunitySignaler = require('./lib/OpportunitySignaler');
 
-// --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES (Lógica do Bot) ---
+// --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES ---
 
 const broadcastToClients = (wssInstance, data) => {
     if (!wssInstance || !wssInstance.clients) return;
     wssInstance.clients.forEach(c => {
         if (c.readyState === WebSocket.OPEN && c.userId) {
-            // Lógica Freemium
             if (data.type === 'opportunity' && c.subscriptionStatus === 'free' && data.data.netSpreadPercentage >= 1.0) {
                 return;
             }
@@ -59,7 +55,7 @@ function createLoggerWithWSS(wssInstance, currentConfig) {
         error: (msg) => log('error', msg),
         debug: (msg) => { if (logLevel === "debug") log('debug', msg); }
     };
-};
+}
 
 class WebSocketOpportunitySignaler extends OpportunitySignaler {
     constructor(sigConfig, signalerLogger, wssInstance) {
@@ -126,7 +122,8 @@ async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
     }
 }
 
-// --- 3. CONFIGURAÇÃO PRINCIPAL E MIDDLEWARES ---
+
+// --- 3. CONFIGURAÇÃO PRINCIPAL E INICIALIZAÇÃO ---
 
 const config = ini.parse(fs.readFileSync(path.resolve(__dirname, "conf.ini"), "utf-8"));
 const app = express();
@@ -135,14 +132,14 @@ const server = http.createServer(app);
 // Configuração do CORS para ser mais restritivo em produção
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://app.arbflash.com', 'https://arbflash.com'] // <-- MUDANÇA AQUI
+    ? ['https://app.arbflash.com', 'https://arbflash.com'] 
     : 'http://localhost:3000',
   credentials: true
 };
 
 app.set('trust proxy', 1);
-app.use(helmet()); // <-- MUDANÇA AQUI: Adiciona cabeçalhos de segurança
-app.use(cors(corsOptions)); // <-- MUDANÇA AQUI: Usa a configuração segura
+app.use(helmet()); // Adiciona cabeçalhos de segurança
+app.use(cors(corsOptions));
 app.use(compression());
 
 const mySessionStore = new SequelizeStore({ db: sequelize });
@@ -156,7 +153,7 @@ const sessionMiddleware = session({
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
         maxAge: 7 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax' // <-- MUDANÇA AQUI: Proteção contra CSRF
+        sameSite: 'lax'
     }
 });
 app.use(sessionMiddleware);
@@ -167,28 +164,27 @@ const logger = createLoggerWithWSS(wss, config);
 User.hasOne(UserConfiguration);
 UserConfiguration.belongsTo(User);
 
-// Carregar chaves de API para a configuração
 config.mexc.api_key = process.env.MY_MEXC_API_KEY;
 config.mexc.api_secret = process.env.MY_MEXC_API_SECRET;
 config.gateio.api_key = process.env.MY_GATEIO_API_KEY;
 config.gateio.api_secret = process.env.MY_GATEIO_API_SECRET;
 
-// Inicialização dos componentes do Bot
 const connectors = { mexc: new MEXCConnector(config.mexc, logger), gateio: new GateConnector(config.gateio, logger) };
 const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger, wss);
 const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger);
 let marketMonitor;
 
 
-// --- 4. DEFINIÇÃO DE ROTAS ---
+// --- 4. DEFINIÇÃO DE ROTAS E LÓGICA DE EXECUÇÃO ---
 
 // A rota do webhook do Stripe precisa vir ANTES do express.json()
 const paymentRoutes = require('./routes/payment.routes');
 app.use('/api/payments', paymentRoutes);
 
-// Middlewares para parsear o corpo das requisições
+// Agora usamos o express.json() para as outras rotas
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
 
 // Servir os ficheiros estáticos da pasta 'public'
 app.use(express.static(path.join(__dirname, 'public')));
@@ -203,25 +199,34 @@ const isAuthenticated = (req, res, next) => {
     if (req.session && req.session.userId) {
         return next();
     }
-    res.status(401).json({ message: "Acesso não autorizado." });
+    res.status(401).json({ message: "Acesso não autorizado. Por favor, faça login para continuar." });
 };
 
 app.post('/api/config/arbitrage', isAuthenticated, (req, res) => {
-    // ... (Sua rota original)
+    const { enableFuturesVsFutures } = req.body;
+    if (typeof enableFuturesVsFutures === 'boolean') {
+        config.arbitrage.enable_futures_vs_futures = enableFuturesVsFutures;
+        logger.info(`Strategy 'Futures vs Futures' was ${enableFuturesVsFutures ? 'ATIVADA' : 'DESATIVADA'} pelo utilizador ${req.session.userId}.`);
+        res.status(200).json({ success: true, message: 'Configuração de Futuros vs Futuros atualizada.' });
+    } else {
+        res.status(400).json({ success: false, message: 'Valor inválido fornecido.' });
+    }
 });
 
 app.post('/api/config/arbitrage/spot', isAuthenticated, (req, res) => {
-    // ... (Sua rota original)
+    const { enableSpotVsSpot } = req.body;
+    if (typeof enableSpotVsSpot === 'boolean') {
+        config.arbitrage.enable_spot_vs_spot = enableSpotVsSpot;
+        logger.info(`Strategy 'Spot vs Spot' was ${enableSpotVsSpot ? 'ATIVADA' : 'DESATIVADA'} pelo utilizador ${req.session.userId}.`);
+        res.status(200).json({ success: true, message: 'Configuração de Spot vs Spot atualizada.' });
+    } else {
+        res.status(400).json({ success: false, message: 'Valor inválido fornecido.' });
+    }
 });
 
 app.get('/api/opportunities', isAuthenticated, (req, res) => res.json(opportunitySignaler.getOpportunities()));
-app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: config.arbitrage, exchanges: { mexc: config.mexc, gateio: config.gateio } }));
+app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: config.arbitrage, exchanges: config.exchanges }));
 
-// Rotas para servir os ficheiros HTML protegidos
-app.get('/', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
-
-// --- 5. LÓGICA DO WEBSOCKET ---
 
 server.on('upgrade', (request, socket, head) => {
     sessionMiddleware(request, {}, () => {
@@ -245,7 +250,8 @@ wss.on("connection", async (wsClient) => {
             wsClient.subscriptionStatus = user.subscriptionStatus;
             logger.info(`User ${wsClient.userId} subscription status: ${wsClient.subscriptionStatus}`);
         } else {
-            wsClient.subscriptionStatus = 'free'; // Default seguro
+            logger.warn(`User ${wsClient.userId} not found in database.`);
+            wsClient.subscriptionStatus = 'free';
         }
 
         const initialOpportunities = opportunitySignaler.getOpportunities().filter(op => {
@@ -263,30 +269,72 @@ wss.on("connection", async (wsClient) => {
     wsClient.on("close", () => logger.info(`User ${wsClient.userId} disconnected.`));
 });
 
-
-// --- 6. INICIALIZAÇÃO E SHUTDOWN DO BOT ---
-
 async function initializeAndStartBot() {
-    // ... (Sua função original)
     logger.info("Initializing bot with Centralized Scanner model...");
-    // ... etc.
+    try {
+        const fallbackPairs = {
+            mexc: ["BTC/USDT", "ETH/USDT"],
+            gateio: ["BTC/USDT", "ETH/USDT"]
+        };
+        const startTime = Date.now();
+        const [mexcPairs, gateioPairs] = await Promise.all([
+            fetchAndFilterPairs(connectors.mexc, "MEXC", config.mexc),
+            fetchAndFilterPairs(connectors.gateio, "GateIO", config.gateio)
+        ]);
+        const fetchTime = Date.now() - startTime;
+        logger.info(`Pairs fetching completed in ${fetchTime}ms`);
+
+        const pairsByExchange = {
+            mexc: mexcPairs.length > 0 ? mexcPairs : fallbackPairs.mexc,
+            gateio: gateioPairs.length > 0 ? gateioPairs : fallbackPairs.gateio
+        };
+
+        if (mexcPairs.length === 0) logger.warn("Using fallback pairs for MEXC due to fetch failure");
+        if (gateioPairs.length === 0) logger.warn("Using fallback pairs for Gate.io due to fetch failure");
+
+        logger.info(`Starting market monitor with ${pairsByExchange.mexc.length} MEXC pairs and ${pairsByExchange.gateio.length} Gate.io pairs`);
+
+        const broadcastCallback = () => {
+            if (marketMonitor) broadcastToClients(wss, { type: 'all_pairs_update', data: marketMonitor.getAllMarketData() });
+        };
+        marketMonitor = new MarketMonitor(connectors, pairsByExchange, arbitrageEngine, logger, config, broadcastCallback);
+        if (Object.keys(connectors).length > 0 && (pairsByExchange.mexc?.length > 0 || pairsByExchange.gateio?.length > 0)) {
+            logger.info("Starting market monitor...");
+            marketMonitor.start();
+            logger.info("Bot initialization completed successfully!");
+        } else {
+            logger.error("[CRITICAL] No exchanges or pairs found. Bot will be idle.");
+        }
+    } catch (error) {
+        logger.error(`[CRITICAL] Failed to initialize bot logic: ${error.message}`);
+        logger.error("Stack trace:", error.stack);
+    }
 }
 
 const shutdown = () => {
-    // ... (Sua função original)
     logger.info("Shutting down...");
-    // ... etc.
+    if (marketMonitor) marketMonitor.stop();
+    server.close(() => {
+        logger.info("Server closed.");
+        sequelize.close().then(() => logger.info("Database connection closed."));
+        process.exit(0);
+    });
+    setTimeout(() => { logger.warn("Forcing shutdown after timeout."); process.exit(1); }, 10000);
 };
 
+// --- 5. ROTA PRINCIPAL E TRATAMENTO DE ERROS ---
 
-// --- 7. ERROS E INÍCIO DA EXECUÇÃO ---
+// Rota para servir a página principal após todas as outras rotas da API
+app.get('/', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-// Middleware de tratamento de erros global
+// Middleware de tratamento de erros global (deve ser o último)
 app.use((err, req, res, next) => {
   console.error("ERRO INESPERADO:", err.stack);
   res.status(500).json({ message: "Ocorreu um erro inesperado no servidor." });
 });
 
+
+// --- 6. INÍCIO DA EXECUÇÃO ---
 sequelize.sync({ alter: true })
     .then(() => {
         mySessionStore.sync();
@@ -294,6 +342,7 @@ sequelize.sync({ alter: true })
         const PORT = process.env.PORT || 3000;
         server.listen(PORT, () => {
             logger.info(`Server listening on port ${PORT}.`);
+            // CORREÇÃO: Garantir que o bot seja inicializado
             initializeAndStartBot();
         });
     })
