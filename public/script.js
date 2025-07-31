@@ -242,12 +242,17 @@ function abrirJanelaDeGrafico(url, windowName, position) {
     let left = (position === 'left') ? 0 : screenWidth - windowWidth;
     const features = `width=${windowWidth},height=${windowHeight},left=${left},top=0,resizable=yes,scrollbars=yes`;
     const newWindow = window.open(url, windowName, features);
-    if (newWindow) newWindow.focus();
+    if (newWindow) {
+        newWindow.focus();
+    } else {
+        alert('Pop-up bloqueado! Por favor, permita pop-ups para este site para abrir os gráficos.');
+    }
 }
 
 function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false) {
     const url = `realtime_profit_calc.html?pair=${encodeURIComponent(pair)}&direction=${encodeURIComponent(direction)}&buyEx=${encodeURIComponent(buyEx)}&sellEx=${encodeURIComponent(sellEx)}`;
-    const windowName = forceNewWindow ? '_blank' : 'arbitrage_calculator_window';
+    const windowName = forceNewWindow ? 
+'_blank' : 'arbitrage_calculator_window';
     const popWidth = 420;
     const popHeight = 220;
     const left = (window.screen.availWidth / 2) - (popWidth / 2);
@@ -256,9 +261,10 @@ function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false
     const calcWindow = window.open(url, windowName, features);
     if (calcWindow) {
         calcWindow.focus();
+    } else {
+        alert("Pop-up da calculadora bloqueado! Por favor, permita pop-ups para este site.");
     }
 }
-
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
     // 1. Parse dos dados da oportunidade
     let opDataToUse = null;
