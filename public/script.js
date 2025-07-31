@@ -662,7 +662,9 @@ function unblockOpportunity(opKeyToUnblock) {
 function requestUiUpdate() {
   if (state.isPaused || uiUpdateScheduled) return;
   uiUpdateScheduled = true;
-  setTimeout(updateAllUI, UI_UPDATE_INTERVAL_MS);
+  // Chamada imediata, já que o setInterval lida com a atualização periódica
+  updateAllUI();
+  uiUpdateScheduled = false; // Resetar imediatamente, pois a atualização é síncrona
 }
 
 function updateAllUI() {
