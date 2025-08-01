@@ -226,13 +226,14 @@ function abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buy
     }
 }
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
-    // 1. Parse dos dados da oportunidade
+function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
+    // 1. Parse dos dados da oportunidade, que contêm os preços
     let opDataToUse = null;
     if (typeof opDataForCopyStr === 'string' && opDataForCopyStr) {
         try {
             opDataToUse = JSON.parse(opDataForCopyStr.replace(/&quot;/g, '"'));
         } catch (e) {
-            console.error("FRONTEND: Falha ao parsear opDataForCopyStr", e);
+            console.error("FRONTEND: Falha ao parsear opDataForCopyStr para abrir gráficos/calculadora", e);
         }
     }
 
@@ -248,9 +249,25 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
-    // 3. Abrir todas as janelas o mais rápido possível, sem pausas
-    abrirCalculadora(pair, direction, buyExchange, sellExchange);
+    // 3. Abrir a calculadora com TODOS os parâmetros necessários (AQUI ESTÁ A CORREÇÃO)
+    if (opDataToUse) {
+        abrirCalculadora(
+            pair, 
+            direction, 
+            buyExchange, 
+            sellExchange, 
+            buyInstrument, 
+            sellInstrument, 
+            opDataToUse.buyPrice, 
+            opDataToUse.sellPrice
+        );
+    } else {
+        // Fallback caso algo dê errado, embora não devesse
+        abrirCalculadora(pair, direction, buyExchange, sellExchange, buyInstrument, sellInstrument, null, null);
+    }
 
+
+    // 4. Abrir as janelas dos gráficos como antes
     let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
     let urlLeg2 = getExchangeUrl(sellExchange, sellInstrument, pair);
     
