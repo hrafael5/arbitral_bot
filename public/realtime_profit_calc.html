@@ -43,7 +43,7 @@
             text-align: center;
         }
         .entry-label {
-            font-size: 10px; /* Ainda menor */
+            font-size: 10px; 
             color: #8b949e; 
             margin-bottom: 10px; 
             text-transform: uppercase;
@@ -62,14 +62,14 @@
         .data-column {
             text-align: center;
             flex: 1 1 0; 
-            min-width: 70px; /* Ajustado */
+            min-width: 70px; 
         }
         .data-column.center {
             border-left: 1px solid #30363d;
             border-right: 1px solid #30363d;
             padding: 0 8px; 
             margin: 0 3px; 
-            flex: 1.5 1 0; /* Coluna central um pouco mais larga para o lucro */
+            flex: 1.5 1 0; 
         }
         .data-column .label {
             font-size: 9px; 
@@ -80,15 +80,14 @@
             white-space: nowrap; 
         }
         .data-column .value {
-            font-size: 16px; /* Tamanho padrão para preços */
+            font-size: 16px; 
             font-weight: 500;
             font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
             word-break: break-all; 
         }
-        /* Lucro E em destaque */
         .data-column.center .value#popupProfitE {
-            font-size: 22px; /* Maior para destaque */
-            font-weight: 600; /* Mais bold */
+            font-size: 22px; 
+            font-weight: 600; 
         }
 
         .profit-value.positive { color: #3fb950; } 
@@ -120,7 +119,7 @@
             border-top: 1px solid #30363d;
         }
         #openChartButton { 
-            padding: 6px 12px; /* Um pouco menor */
+            padding: 6px 12px; 
             font-size: 12px;
             cursor: pointer;
             background-color: #238636; 
@@ -237,21 +236,30 @@
             element.className = finalClassName;
         }
 
-        function calculateLucroS_PopUp() {
-            if (!simulatedData[pair]) return NaN;
+        function calculateLucroS_PopUp(dataSource) {
+            const currentData = dataSource.allPairsData;
+            const currentConfig = dataSource.config;
+
+            if (!currentData[pair]) {
+                console.log('[CalcPopUpS] Dados para o par não encontrados na fonte atual.');
+                return NaN;
+            }
             
-            const configForS_BuyLeg = simulatedConfig.exchanges[entrySellExName.toLowerCase()]; 
-            const configForS_SellLeg = simulatedConfig.exchanges[entryBuyExName.toLowerCase()]; 
+            const configForS_BuyLeg = currentConfig.exchanges[entrySellExName.toLowerCase()]; 
+            const configForS_SellLeg = currentConfig.exchanges[entryBuyExName.toLowerCase()]; 
 
             if (!configForS_BuyLeg || !configForS_SellLeg) {
                 console.warn(`[CalcPopUpS] Config de taxas não encontrada para ${entrySellExName} ou ${entryBuyExName} (para Saída)`);
                 return NaN;
             }
 
-            const marketDataForS_BuyLeg = simulatedData[pair][entrySellExName.toLowerCase()];
-            const marketDataForS_SellLeg = simulatedData[pair][entryBuyExName.toLowerCase()];
+            const marketDataForS_BuyLeg = currentData[pair][entrySellExName.toLowerCase()];
+            const marketDataForS_SellLeg = currentData[pair][entryBuyExName.toLowerCase()];
 
-            if (!marketDataForS_BuyLeg || !marketDataForS_SellLeg) return NaN;
+            if (!marketDataForS_BuyLeg || !marketDataForS_SellLeg) {
+                console.log('[CalcPopUpS] Dados de mercado para pernas de saída não encontrados.');
+                return NaN;
+            }
 
             let price_S_Buy, fee_S_Buy;
             if (entrySellInstrumentIsSpot) {
@@ -279,22 +287,39 @@
                 const netSpreadS = grossSpreadS - fee_S_Buy - fee_S_Sell; 
                 return netSpreadS * 100; 
             }
+            console.log('[CalcPopUpS] Preços ou taxas inválidos para cálculo de lucro S.');
             return NaN;
         }
 
         function updatePopupDisplay() {
-            if (!simulatedData[pair]) {
-                formatProfitPercentageForDisplay(NaN, popupProfitEEl);
-                formatProfitPercentageForDisplay(NaN, popupProfitSEl);
-                return;
+            let dataSource = null;
+
+            // Tenta acessar dados reais primeiro, mas com tratamento de erro CORS
+            try {
+                if (window.opener && !window.opener.closed && window.opener.frontendState) {
+                    dataSource = window.opener.frontendState;
+                    console.log('[CalcPopUpNew] Usando dados de window.opener.frontendState.');
+                }
+            } catch (e) {
+                // Ignora erros de CORS silenciosamente
+                console.log('[CalcPopUpNew] Acesso a window.opener bloqueado por CORS, usando dados simulados.');
+            }
+
+            // Fallback para dados simulados
+            if (!dataSource || !dataSource.allPairsData || !dataSource.config || !dataSource.config.exchanges) {
+                console.log('[CalcPopUpNew] Usando dados simulados.');
+                dataSource = { allPairsData: simulatedData, config: simulatedConfig };
             }
 
             try {
-                const configEntryBuyEx = simulatedConfig.exchanges[entryBuyExName.toLowerCase()];
-                const configEntrySellEx = simulatedConfig.exchanges[entrySellExName.toLowerCase()];
+                const currentConfig = dataSource.config;
+                const currentAllPairsData = dataSource.allPairsData;
+
+                const configEntryBuyEx = currentConfig.exchanges[entryBuyExName.toLowerCase()];
+                const configEntrySellEx = currentConfig.exchanges[entrySellExName.toLowerCase()];
 
                 if (!configEntryBuyEx || !configEntrySellEx) {
-                    console.warn(`[CalcPopUpNew] Config de taxas não encontrada para ${entryBuyExName} ou ${entrySellExName}`);
+                    console.warn(`[CalcPopUpNew] Config de taxas não encontrada para ${entryBuyExName} ou ${entrySellExName}.`);
                     formatProfitPercentageForDisplay(NaN, popupProfitEEl);
                     formatProfitPercentageForDisplay(NaN, popupProfitSEl);
                     return;
@@ -303,8 +328,9 @@
                 const feeForEntryBuyOrder = entryBuyInstrumentIsSpot ? parseFloat(configEntryBuyEx.spotMakerFee) : parseFloat(configEntryBuyEx.futuresMakerFee);
                 const feeForEntrySellOrder = entrySellInstrumentIsSpot ? parseFloat(configEntrySellEx.spotMakerFee) : parseFloat(configEntrySellEx.futuresMakerFee);
                 
-                const marketDataForEntryBuyLeg = simulatedData[pair][entryBuyExName.toLowerCase()];
-                const marketDataForEntrySellLeg = simulatedData[pair][entrySellExName.toLowerCase()];
+                // Acesso direto aos dados do par
+                const marketDataForEntryBuyLeg = currentAllPairsData[pair] ? currentAllPairsData[pair][entryBuyExName.toLowerCase()] : null;
+                const marketDataForEntrySellLeg = currentAllPairsData[pair] ? currentAllPairsData[pair][entrySellExName.toLowerCase()] : null;
 
                 if (marketDataForEntryBuyLeg && marketDataForEntrySellLeg) {
                     const priceToBuyEntry = entryBuyInstrumentIsSpot ? marketDataForEntryBuyLeg.spotPrice : marketDataForEntryBuyLeg.futuresPrice; 
@@ -317,7 +343,7 @@
                     }
                     formatProfitPercentageForDisplay(netSpreadMakerEntry * 100, popupProfitEEl);
                     
-                    const netSpreadMakerS_percentage = calculateLucroS_PopUp();
+                    const netSpreadMakerS_percentage = calculateLucroS_PopUp(dataSource);
                     formatProfitPercentageForDisplay(netSpreadMakerS_percentage, popupProfitSEl);
 
                     if (popupPairDisplayEl) popupPairDisplayEl.textContent = pair.split('/')[0];
@@ -329,6 +355,7 @@
                     if (popupLeg2PriceEl) popupLeg2PriceEl.textContent = formatPriceForDisplay(priceToSellEntry, getRelevantDecimals(priceToSellEntry));
                     
                 } else {
+                    console.log('[CalcPopUpNew] Dados de mercado para pernas de entrada não encontrados.');
                     formatProfitPercentageForDisplay(NaN, popupProfitEEl);
                     formatProfitPercentageForDisplay(NaN, popupProfitSEl);
                     if (popupLeg1PriceEl) popupLeg1PriceEl.textContent = "Dados?";
