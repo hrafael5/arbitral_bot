@@ -1473,12 +1473,21 @@ function setupEventListeners() {
     }
     
     const calculatorIcon = e.target.closest('.calculator-icon');
-    if (calculatorIcon) {
-        const { pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice } = calculatorIcon.dataset;
-        if (pair && direction && buyEx && sellEx && buyInst && sellInst && buyPrice && sellPrice) {
-            abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice, true);
-        }
+if (calculatorIcon) {
+    // Leitura explícita dos atributos - mais seguro
+    const pair = calculatorIcon.getAttribute('data-pair');
+    const direction = calculatorIcon.getAttribute('data-direction');
+    const buyEx = calculatorIcon.getAttribute('data-buy-ex');
+    const sellEx = calculatorIcon.getAttribute('data-sell-ex');
+    const buyInst = calculatorIcon.getAttribute('data-buy-inst');
+    const sellInst = calculatorIcon.getAttribute('data-sell-inst');
+    const buyPrice = calculatorIcon.getAttribute('data-buy-price');
+    const sellPrice = calculatorIcon.getAttribute('data-sell-price');
+
+    if (pair && direction && buyEx && sellEx && buyInst && sellInst && buyPrice && sellPrice) {
+        abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice, true);
     }
+}
     
     const favoriteStar = e.target.closest('.favorite-star');
     if (favoriteStar) {
