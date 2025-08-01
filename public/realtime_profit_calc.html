@@ -268,6 +268,13 @@
         window.onload = () => {
             const params = new URLSearchParams(window.location.search);
             
+            // DEBUG: Log dos parâmetros recebidos
+            console.log('URL completa:', window.location.href);
+            console.log('Parâmetros recebidos:');
+            for (const [key, value] of params.entries()) {
+                console.log(`${key}: ${value}`);
+            }
+            
             // Pega os dados da URL
             pair = params.get('pair');
             entryBuyExName = params.get('buyEx');
@@ -276,6 +283,16 @@
             entrySellInstrument = params.get('sellInst');
             const initialBuyPrice = parseFloat(params.get('buyPrice'));
             const initialSellPrice = parseFloat(params.get('sellPrice'));
+            
+            // DEBUG: Log dos valores parseados
+            console.log('Valores parseados:');
+            console.log('pair:', pair);
+            console.log('entryBuyExName:', entryBuyExName);
+            console.log('entrySellExName:', entrySellExName);
+            console.log('entryBuyInstrument:', entryBuyInstrument);
+            console.log('entrySellInstrument:', entrySellInstrument);
+            console.log('initialBuyPrice:', initialBuyPrice);
+            console.log('initialSellPrice:', initialSellPrice);
             
             if (!pair) {
                 document.body.innerHTML = '<h1>Erro: Par não especificado.</h1>';
@@ -286,31 +303,42 @@
 
             // **EXIBIÇÃO INICIAL E IMEDIATA DOS DADOS**
             popupPairDisplayEl.textContent = pair.split('/')[0];
-            popupLeg1ExchangeEl.textContent = entryBuyExName.length > 4 ? entryBuyExName.substring(0, 4).toUpperCase() : entryBuyExName.toUpperCase();
-            popupLeg1InstrumentEl.textContent = entryBuyInstrument.toUpperCase().includes('SPOT') ? 'S' : 'F';
+            popupLeg1ExchangeEl.textContent = entryBuyExName ? (entryBuyExName.length > 4 ? entryBuyExName.substring(0, 4).toUpperCase() : entryBuyExName.toUpperCase()) : 'EX1';
+            popupLeg1InstrumentEl.textContent = entryBuyInstrument ? (entryBuyInstrument.toUpperCase().includes('SPOT') ? 'S' : 'F') : 'S';
             popupLeg1PriceEl.textContent = formatPriceForDisplay(initialBuyPrice);
             
-            popupLeg2ExchangeEl.textContent = entrySellExName.length > 4 ? entrySellExName.substring(0, 4).toUpperCase() : entrySellExName.toUpperCase();
-            popupLeg2InstrumentEl.textContent = entrySellInstrument.toUpperCase().includes('SPOT') ? 'S' : 'F';
+            popupLeg2ExchangeEl.textContent = entrySellExName ? (entrySellExName.length > 4 ? entrySellExName.substring(0, 4).toUpperCase() : entrySellExName.toUpperCase()) : 'EX2';
+            popupLeg2InstrumentEl.textContent = entrySellInstrument ? (entrySellInstrument.toUpperCase().includes('SPOT') ? 'S' : 'F') : 'F';
             popupLeg2PriceEl.textContent = formatPriceForDisplay(initialSellPrice);
 
             // Calcular e exibir lucros iniciais se os preços estão disponíveis
             if (typeof initialBuyPrice === 'number' && typeof initialSellPrice === 'number' && !isNaN(initialBuyPrice) && !isNaN(initialSellPrice) && initialBuyPrice > 0) {
+                console.log('Calculando lucros iniciais...');
                 // Usar taxas padrão se não conseguir acessar a janela principal ainda
                 const defaultFees = {
                     mexc: { spotMakerFee: 0.0000, futuresMakerFee: 0.0001 },
                     gateio: { spotMakerFee: 0.0010, futuresMakerFee: 0.0002 }
                 };
                 
-                const buyExConfig = defaultFees[entryBuyExName.toLowerCase()] || { spotMakerFee: 0.001, futuresMakerFee: 0.001 };
-                const sellExConfig = defaultFees[entrySellExName.toLowerCase()] || { spotMakerFee: 0.001, futuresMakerFee: 0.001 };
+                const buyExConfig = defaultFees[entryBuyExName ? entryBuyExName.toLowerCase() : 'mexc'] || { spotMakerFee: 0.001, futuresMakerFee: 0.001 };
+                const sellExConfig = defaultFees[entrySellExName ? entrySellExName.toLowerCase() : 'mexc'] || { spotMakerFee: 0.001, futuresMakerFee: 0.001 };
                 
-                const feeForBuyOrder = entryBuyInstrument.toUpperCase().includes('SPOT') ? buyExConfig.spotMakerFee : buyExConfig.futuresMakerFee;
-                const feeForSellOrder = entrySellInstrument.toUpperCase().includes('SPOT') ? sellExConfig.spotMakerFee : sellExConfig.futuresMakerFee;
+                const feeForBuyOrder = entryBuyInstrument && entryBuyInstrument.toUpperCase().includes('SPOT') ? buyExConfig.spotMakerFee : buyExConfig.futuresMakerFee;
+                const feeForSellOrder = entrySellInstrument && entrySellInstrument.toUpperCase().includes('SPOT') ? sellExConfig.spotMakerFee : sellExConfig.futuresMakerFee;
                 
                 const grossSpread = (initialSellPrice / initialBuyPrice) - 1;
                 const netSpread = (grossSpread - feeForBuyOrder - feeForSellOrder) * 100;
+                
+                console.log('grossSpread:', grossSpread);
+                console.log('feeForBuyOrder:', feeForBuyOrder);
+                console.log('feeForSellOrder:', feeForSellOrder);
+                console.log('netSpread:', netSpread);
+                
                 formatProfitPercentageForDisplay(netSpread, popupProfitEEl);
+            } else {
+                console.log('Não foi possível calcular lucros iniciais - preços inválidos');
+                console.log('initialBuyPrice válido?', typeof initialBuyPrice === 'number' && !isNaN(initialBuyPrice));
+                console.log('initialSellPrice válido?', typeof initialSellPrice === 'number' && !isNaN(initialSellPrice));
             }
 
             // Inicia o loop para buscar dados ao vivo
