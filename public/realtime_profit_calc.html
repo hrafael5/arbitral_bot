@@ -294,6 +294,25 @@
             popupLeg2InstrumentEl.textContent = entrySellInstrument.toUpperCase().includes('SPOT') ? 'S' : 'F';
             popupLeg2PriceEl.textContent = formatPriceForDisplay(initialSellPrice);
 
+            // Calcular e exibir lucros iniciais se os preços estão disponíveis
+            if (typeof initialBuyPrice === 'number' && typeof initialSellPrice === 'number' && !isNaN(initialBuyPrice) && !isNaN(initialSellPrice) && initialBuyPrice > 0) {
+                // Usar taxas padrão se não conseguir acessar a janela principal ainda
+                const defaultFees = {
+                    mexc: { spotMakerFee: 0.0000, futuresMakerFee: 0.0001 },
+                    gateio: { spotMakerFee: 0.0010, futuresMakerFee: 0.0002 }
+                };
+                
+                const buyExConfig = defaultFees[entryBuyExName.toLowerCase()] || { spotMakerFee: 0.001, futuresMakerFee: 0.001 };
+                const sellExConfig = defaultFees[entrySellExName.toLowerCase()] || { spotMakerFee: 0.001, futuresMakerFee: 0.001 };
+                
+                const feeForBuyOrder = entryBuyInstrument.toUpperCase().includes('SPOT') ? buyExConfig.spotMakerFee : buyExConfig.futuresMakerFee;
+                const feeForSellOrder = entrySellInstrument.toUpperCase().includes('SPOT') ? sellExConfig.spotMakerFee : sellExConfig.futuresMakerFee;
+                
+                const grossSpread = (initialSellPrice / initialBuyPrice) - 1;
+                const netSpread = (grossSpread - feeForBuyOrder - feeForSellOrder) * 100;
+                formatProfitPercentageForDisplay(netSpread, popupProfitEEl);
+            }
+
             // Inicia o loop para buscar dados ao vivo
             updateWithLiveData(); // Faz uma chamada inicial
             window.profitUpdateInterval = setInterval(updateWithLiveData, 1000);
