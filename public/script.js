@@ -200,20 +200,31 @@ function abrirJanelaDeGrafico(url, windowName, position) {
     if (newWindow) newWindow.focus();
 }
 
-function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false) {
-    const url = `realtime_profit_calc.html?pair=${encodeURIComponent(pair)}&direction=${encodeURIComponent(direction)}&buyEx=${encodeURIComponent(buyEx)}&sellEx=${encodeURIComponent(sellEx)}`;
+function abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice, forceNewWindow = false) {
+    const params = new URLSearchParams({
+        pair: pair,
+        direction: direction,
+        buyEx: buyEx,
+        sellEx: sellEx,
+        buyInst: buyInst,
+        sellInst: sellInst,
+        buyPrice: buyPrice,
+        sellPrice: sellPrice
+    });
+
+    const url = `realtime_profit_calc.html?${params.toString()}`;
     const windowName = forceNewWindow ? '_blank' : 'arbitrage_calculator_window';
     const popWidth = 420;
     const popHeight = 220;
     const left = (window.screen.availWidth / 2) - (popWidth / 2);
     const top = (window.screen.availHeight / 2) - (popHeight / 2);
     const features = `width=${popWidth},height=${popHeight},top=${top},left=${left},resizable=yes,scrollbars=yes`;
+    
     const calcWindow = window.open(url, windowName, features);
     if (calcWindow) {
         calcWindow.focus();
     }
 }
-
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
     // 1. Parse dos dados da oportunidade
     let opDataToUse = null;
@@ -1116,7 +1127,16 @@ function renderOpportunitiesTable() {
         const compraLink = `<a href="#" class="exchange-link" data-exchange="${escapedBuyEx}" data-instrument="${escapedBuyInst}" data-pair="${escapedPair}">${getExchangeTag(op.buyExchange)} ${op.buyInstrument}<span>${formatPrice(op.buyPrice)}</span></a>`;
         const vendaLink = `<a href="#" class="exchange-link" data-exchange="${escapedSellEx}" data-instrument="${escapedSellInst}" data-pair="${escapedPair}">${getExchangeTag(op.sellExchange)} ${op.sellInstrument}<span>${formatPrice(op.sellPrice)}</span></a>`;
 
-        const calculatorIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="calculator-icon" data-pair="${escapedPair}" data-direction="${escapedDirection}" data-buy-ex="${escapedBuyEx}" data-sell-ex="${escapedSellEx}" title="Abrir Calculadora Detalhada em nova janela"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="16" y1="10" x2="16" y2="10"></line><line x1="12" y1="10" x2="12" y2="10"></line><line x1="8" y1="10" x2="8" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="8" y1="14" x2="8" y2="18"></line></svg>`;
+        const calculatorIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="calculator-icon" 
+    data-pair="${escapedPair}" 
+    data-direction="${escapedDirection}" 
+    data-buy-ex="${escapedBuyEx}" 
+    data-sell-ex="${escapedSellEx}" 
+    data-buy-inst="${escapedBuyInst}" 
+    data-sell-inst="${escapedSellInst}" 
+    data-buy-price="${op.buyPrice}" 
+    data-sell-price="${op.sellPrice}" 
+    title="Abrir Calculadora Detalhada em nova janela"></svg>`;
 
         tableHtml += `<tr>
       <td class="pair-cell">
@@ -1755,16 +1775,20 @@ function setupEventListeners() {
         
         // Event listener para ícone da calculadora
         if (e.target.closest('.calculator-icon')) {
-            const icon = e.target.closest('.calculator-icon');
-            const pair = icon.getAttribute('data-pair');
-            const direction = icon.getAttribute('data-direction');
-            const buyEx = icon.getAttribute('data-buy-ex');
-            const sellEx = icon.getAttribute('data-sell-ex');
-            
-            if (pair && direction && buyEx && sellEx) {
-                abrirCalculadora(pair, direction, buyEx, sellEx, true);
-            }
-        }
+    const icon = e.target.closest('.calculator-icon');
+    const pair = icon.getAttribute('data-pair');
+    const direction = icon.getAttribute('data-direction');
+    const buyEx = icon.getAttribute('data-buy-ex');
+    const sellEx = icon.getAttribute('data-sell-ex');
+    const buyInst = icon.getAttribute('data-buy-inst');
+    const sellInst = icon.getAttribute('data-sell-inst');
+    const buyPrice = icon.getAttribute('data-buy-price');
+    const sellPrice = icon.getAttribute('data-sell-price');
+    
+    if (pair && direction && buyEx && sellEx && buyInst && sellInst && buyPrice && sellPrice) {
+        abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice, true);
+    }
+}
         
         // Event listener para estrela de favoritar
         if (e.target.classList.contains('favorite-star')) {
