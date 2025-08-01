@@ -1361,6 +1361,7 @@ function fetchConfigAndUpdateUI() {
 }
 
 function setupEventListeners() {
+  // Listeners para controles gerais (sidebar, tema, filtros, etc.)
   if (elements.sidebarToggle) elements.sidebarToggle.addEventListener('click', toggleSidebar);
   if (elements.navArbitragens) elements.navArbitragens.addEventListener('click', () => setCurrentView('arbitragens'));
   if (elements.navSaidaOp) elements.navSaidaOp.addEventListener('click', () => setCurrentView('saida-op'));
@@ -1426,9 +1427,66 @@ function setupEventListeners() {
       console.error("ERRO CRÍTICO: O campo de input com o ID 'default-capital-input' não foi encontrado no HTML.");
   }
 
-
   if (soundProfitThresholdInputEl) soundProfitThresholdInputEl.addEventListener('input', () => { state.soundProfitThreshold = parseFloat(soundProfitThresholdInputEl.value) || 0; });
-}
+ // Listener GERAL para ações na tabela (delegação de eventos)
+  document.addEventListener('click', function(e) {
+    const sortableHeader = e.target.closest('.sortable');
+    if (sortableHeader) {
+        const sortColumn = sortableHeader.getAttribute('data-sort');
+        if (sortColumn) sortByColumn(sortColumn);
+    }
+    
+    const copyBtn = e.target.closest('.copy-btn');
+    if (copyBtn) {
+        const copyValue = copyBtn.getAttribute('data-copy-value');
+        if (copyValue) copiarParaClipboard(copyValue, copyBtn);
+    }
+    
+    const openAllIcon = e.target.closest('.open-exchange-icon');
+    if (openAllIcon) {
+        const { buyEx, buyInst, sellEx, sellInst, pair, direction, opData } = openAllIcon.dataset;
+        if (buyEx && buyInst && sellEx && sellInst && pair && direction) {
+            abrirGraficosComLayout(buyEx, buyInst, sellEx, sellInst, pair, direction, opData);
+        }
+    }
+    
+    const exchangeLink = e.target.closest('.exchange-link');
+    if (exchangeLink) {
+        e.preventDefault();
+        const { exchange, instrument, pair } = exchangeLink.dataset;
+        if (exchange && instrument && pair) {
+            const url = getExchangeUrl(exchange, instrument, pair);
+            if (url) window.open(url, '_blank');
+        }
+    }
+    
+    const calculatorIcon = e.target.closest('.calculator-icon');
+    if (calculatorIcon) {
+        const { pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice } = calculatorIcon.dataset;
+        if (pair && direction && buyEx && sellEx && buyInst && sellInst && buyPrice && sellPrice) {
+            abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice, true);
+        }
+    }
+    
+    const favoriteStar = e.target.closest('.favorite-star');
+    if (favoriteStar) {
+        const opKey = favoriteStar.dataset.opKey;
+        if (opKey) toggleFavorite(opKey);
+    }
+    
+    const blockIcon = e.target.closest('.block-icon');
+    if (blockIcon) {
+        const { opKey, opData } = blockIcon.dataset;
+        if (opKey && opData) toggleBlock(opKey, opData);
+    }
+    
+    const rehabButton = e.target.closest('.rehab-button');
+    if (rehabButton) {
+        const opKey = rehabButton.dataset.opKey;
+        if (opKey) unblockOpportunity(opKey);
+    }
+  });
+} 
 
 function init() {
   loadFavorites();
@@ -1718,109 +1776,5 @@ function applyFreemiumRestrictions() {
             }
         }
     });
-}
-
-// Função para configurar event listeners e substituir event handlers inline
-function setupEventListeners() {
-    // Event listeners para cabeçalhos de tabela sortable
-    document.addEventListener('click', function(e) {
-        if (e.target.closest('.sortable')) {
-            const sortableElement = e.target.closest('.sortable');
-            const sortColumn = sortableElement.getAttribute('data-sort');
-            if (sortColumn) {
-                sortByColumn(sortColumn);
-            }
-        }
-        
-        // Event listener para botões de copiar
-        if (e.target.classList.contains('copy-btn')) {
-            const copyValue = e.target.getAttribute('data-copy-value');
-            if (copyValue) {
-                copiarParaClipboard(copyValue, e.target);
-            }
-        }
-        
-        // Event listener para ícone de abrir gráficos
-        if (e.target.closest('.open-exchange-icon')) {
-            const icon = e.target.closest('.open-exchange-icon');
-            const buyEx = icon.getAttribute('data-buy-ex');
-            const buyInst = icon.getAttribute('data-buy-inst');
-            const sellEx = icon.getAttribute('data-sell-ex');
-            const sellInst = icon.getAttribute('data-sell-inst');
-            const pair = icon.getAttribute('data-pair');
-            const direction = icon.getAttribute('data-direction');
-            const opData = icon.getAttribute('data-op-data');
-            
-            if (buyEx && buyInst && sellEx && sellInst && pair && direction) {
-                abrirGraficosComLayout(buyEx, buyInst, sellEx, sellInst, pair, direction, opData);
-            }
-        }
-        
-        // Event listener para links de exchange
-        if (e.target.closest('.exchange-link')) {
-            e.preventDefault();
-            const link = e.target.closest('.exchange-link');
-            const exchange = link.getAttribute('data-exchange');
-            const instrument = link.getAttribute('data-instrument');
-            const pair = link.getAttribute('data-pair');
-            
-            if (exchange && instrument && pair) {
-                const url = getExchangeUrl(exchange, instrument, pair);
-                if (url) {
-                    window.open(url, '_blank');
-                }
-            }
-            return false;
-        }
-        
-        // Event listener para ícone da calculadora
-        if (e.target.closest('.calculator-icon')) {
-    const icon = e.target.closest('.calculator-icon');
-    const pair = icon.getAttribute('data-pair');
-    const direction = icon.getAttribute('data-direction');
-    const buyEx = icon.getAttribute('data-buy-ex');
-    const sellEx = icon.getAttribute('data-sell-ex');
-    const buyInst = icon.getAttribute('data-buy-inst');
-    const sellInst = icon.getAttribute('data-sell-inst');
-    const buyPrice = icon.getAttribute('data-buy-price');
-    const sellPrice = icon.getAttribute('data-sell-price');
-    
-    if (pair && direction && buyEx && sellEx && buyInst && sellInst && buyPrice && sellPrice) {
-        abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice, true);
-    }
-}
-        
-        // Event listener para estrela de favoritar
-        if (e.target.classList.contains('favorite-star')) {
-            const opKey = e.target.getAttribute('data-op-key');
-            if (opKey) {
-                toggleFavorite(opKey);
-            }
-        }
-        
-        // Event listener para ícone de bloquear
-        if (e.target.classList.contains('block-icon')) {
-            const opKey = e.target.getAttribute('data-op-key');
-            const opData = e.target.getAttribute('data-op-data');
-            if (opKey && opData) {
-                toggleBlock(opKey, opData);
-            }
-        }
-        
-        // Event listener para botão de reabilitar
-        if (e.target.classList.contains('rehab-button')) {
-            const opKey = e.target.getAttribute('data-op-key');
-            if (opKey) {
-                unblockOpportunity(opKey);
-            }
-        }
-    });
-}
-
-// Inicializar event listeners quando o DOM estiver carregado
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupEventListeners);
-} else {
-    setupEventListeners();
 }
 
