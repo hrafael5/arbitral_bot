@@ -3,7 +3,7 @@ const OPPORTUNITY_TTL_MS = 10000;
 const DEFAULT_CAPITAL_STORAGE_KEY = 'arbitrageDashboard_defaultCapital_v1';
 const MONITOR_PARES_EXPANDED_KEY = 'arbitrageDashboard_monitorParesExpanded_v1';
 const WATCHED_PAIRS_EXPANDED_KEY = 'arbitrageDashboard_watchedPairsExpanded_v1';
-const HIDDEN_WATCHED_OPS_STORAGE_KEY = 'arbitrageDashboard_hiddenWatchedOps_v1'; // Nova chave para localStorage
+const HIDDEN_WATCHED_OPS_STORAGE_KEY = 'arbitrageDashboard_hiddenWatchedOps_v1';
 
 const state = {
   allPairsData: [],
@@ -41,7 +41,7 @@ const state = {
   favoritedOps: [],
   blockedOps: [],
   watchedPairsList: [],
-  hiddenWatchedOps: new Set(), // Alterado para Set para melhor performance
+  hiddenWatchedOps: new Set(),
   soundEnabled: false,
   soundPermissionGranted: false,
   soundProfitThreshold: 0.0,
@@ -225,9 +225,9 @@ function abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buy
         calcWindow.focus();
     }
 }
+
+// CORRIGIDO: Esta função agora passa todos os parâmetros para a calculadora.
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
-function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
-    // 1. Parse dos dados da oportunidade, que contêm os preços
     let opDataToUse = null;
     if (typeof opDataForCopyStr === 'string' && opDataForCopyStr) {
         try {
@@ -237,7 +237,6 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
-    // 2. Calcular e copiar o valor primeiro, enquanto a página principal tem foco
     if (opDataToUse && opDataToUse.buyPrice && state.defaultCapitalUSD > 0) {
         const buyPrice = parseFloat(opDataToUse.buyPrice);
         if (buyPrice > 0) {
@@ -249,7 +248,6 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
-    // 3. Abrir a calculadora com TODOS os parâmetros necessários (AQUI ESTÁ A CORREÇÃO)
     if (opDataToUse) {
         abrirCalculadora(
             pair, 
@@ -262,12 +260,9 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
             opDataToUse.sellPrice
         );
     } else {
-        // Fallback caso algo dê errado, embora não devesse
         abrirCalculadora(pair, direction, buyExchange, sellExchange, buyInstrument, sellInstrument, null, null);
     }
 
-
-    // 4. Abrir as janelas dos gráficos como antes
     let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
     let urlLeg2 = getExchangeUrl(sellExchange, sellInstrument, pair);
     
@@ -343,7 +338,7 @@ function toggleBlockedOps() {
 
 function getFilteredOpportunities() {
     let opportunities = state.arbitrageOpportunities.filter(opWrapper => {
-        const op = opWrapper.data; // Corrigido: acessando op.data
+        const op = opWrapper.data; 
         if (state.watchedPairsList.includes(op.pair)) return false;
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
 
@@ -547,7 +542,6 @@ function saveBlockedOps() {
   localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(state.blockedOps));
 }
 
-// --- Funções para gerenciar combinações ocultas no localStorage ---
 function loadHiddenWatchedOps() {
     const stored = localStorage.getItem(HIDDEN_WATCHED_OPS_STORAGE_KEY);
     state.hiddenWatchedOps = stored ? new Set(JSON.parse(stored)) : new Set();
@@ -619,14 +613,12 @@ function addWatchedPair() {
   }
 }
 
-// Nova função para remover um par vigiado completamente
 async function removeWatchedPair(pairToRemove) {
     if (confirm(`Tem certeza que deseja remover o par ${pairToRemove} da sua lista de pares vigiados?`)) {
         state.watchedPairsList = state.watchedPairsList.filter(pair => pair !== pairToRemove);
-        // Remover também as combinações ocultas relacionadas a este par
         state.hiddenWatchedOps = new Set(Array.from(state.hiddenWatchedOps).filter(opKey => !opKey.startsWith(`${pairToRemove}|`)));
         saveHiddenWatchedOps();
-        await saveWatchedPairs(); // Salva a lista atualizada no servidor
+        await saveWatchedPairs(); 
         requestUiUpdate();
     }
 }
@@ -684,7 +676,7 @@ function updateAllUI() {
   renderBlockedOpportunitiesTable();
   renderWatchedPairsTable();
   updateMainTitle();
-  updateWatchedPairsCount(); // Atualiza o contador de pares vigiados
+  updateWatchedPairsCount();
 }
 
 function updateGlobalUIState() {
@@ -869,14 +861,13 @@ function renderWatchedPairsTable() {
     let tableHtml = "";
     let combinationsFound = 0;
 
-    // Agrupar oportunidades por par para renderizar o cabeçalho do par uma vez
     const opportunitiesByPair = state.watchedPairsList.reduce((acc, pair) => {
         acc[pair] = state.arbitrageOpportunities.filter(opWrapper => {
             const op = opWrapper.data;
             if (op.pair !== pair) return false;
 
-            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; // Chave mais específica
-            if (state.hiddenWatchedOps.has(opKey)) { // Usar o Set de hiddenWatchedOps
+            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; 
+            if (state.hiddenWatchedOps.has(opKey)) { 
                 return false;
             }
 
@@ -915,7 +906,6 @@ function renderWatchedPairsTable() {
             combinationsFound += opportunitiesForPair.length;
             const escapedPair = escapeHTML(pair);
 
-            // Adicionar o cabeçalho do par com o novo botão 'Remover Par'
             tableHtml += `
                 <tr class="watched-pair-header-row">
                     <td colspan="8">
@@ -933,7 +923,7 @@ function renderWatchedPairsTable() {
                 const lucroS_percent = calculateLucroS(op, state.allPairsData, state.config);
                 const lucroEClass = lucroE_percent >= 0 ? 'profit-positive' : 'profit-negative';
                 const lucroSClass = lucroS_percent === null ? 'profit-zero' : (lucroS_percent >= 0 ? 'profit-positive' : 'profit-negative');
-                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; // Chave mais específica
+                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
 
                 let volumeDisplay, fundingRateDisplay, fundingRateClass = 'profit-zero';
                  if (op.type === "INTER_EXCHANGE_FUT_FUT") {
@@ -982,7 +972,6 @@ function renderWatchedPairsTable() {
 
     watchedPairsTableBodyEl.innerHTML = tableHtml;
 
-    // Adicionar event listeners para os botões de ocultar
     document.querySelectorAll('.hide-watched-op-button').forEach(button => {
         button.addEventListener('click', function() {
             const keyToHide = this.dataset.opKey;
@@ -990,7 +979,6 @@ function renderWatchedPairsTable() {
         });
     });
 
-    // Adicionar event listeners para os novos botões de remover par
     document.querySelectorAll('.remove-pair-button').forEach(button => {
         button.addEventListener('click', function() {
             const pairToRemove = this.dataset.pair;
@@ -1137,56 +1125,46 @@ function renderOpportunitiesTable() {
         const escapedOpKey = escapeHTML(opKey);
 
         const escapedOpDataForCopy = JSON.stringify(op).replace(/"/g, '&quot;');
-        const openAllClickHandler = `abrirGraficosComLayout('${escapedBuyEx}', '${escapedBuyInst}', '${escapedSellEx}', '${escapedSellInst}', '${escapedPair}', '${escapedDirection}', '${escapedOpDataForCopy}')`;
-
+        
         const openAllIcon = `<svg class="open-exchange-icon" data-buy-ex="${escapedBuyEx}" data-buy-inst="${escapedBuyInst}" data-sell-ex="${escapedSellEx}" data-sell-inst="${escapedSellInst}" data-pair="${escapedPair}" data-direction="${escapedDirection}" data-op-data="${escapedOpDataForCopy}" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" title="Abrir gráficos, calculadora E copiar qtd. sugerida"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`;
 
         const compraLink = `<a href="#" class="exchange-link" data-exchange="${escapedBuyEx}" data-instrument="${escapedBuyInst}" data-pair="${escapedPair}">${getExchangeTag(op.buyExchange)} ${op.buyInstrument}<span>${formatPrice(op.buyPrice)}</span></a>`;
         const vendaLink = `<a href="#" class="exchange-link" data-exchange="${escapedSellEx}" data-instrument="${escapedSellInst}" data-pair="${escapedPair}">${getExchangeTag(op.sellExchange)} ${op.sellInstrument}<span>${formatPrice(op.sellPrice)}</span></a>`;
 
         const calculatorIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="calculator-icon" 
-    data-pair="${escapedPair}" 
-    data-direction="${escapedDirection}" 
-    data-buy-ex="${escapedBuyEx}" 
-    data-sell-ex="${escapedSellEx}" 
-    data-buy-inst="${escapedBuyInst}" 
-    data-sell-inst="${escapedSellInst}" 
-    data-buy-price="${op.buyPrice}" 
-    data-sell-price="${op.sellPrice}" 
-    title="Abrir Calculadora Detalhada em nova janela">
-    <rect x="4" y="2" width="16" height="20" rx="2"></rect>
-    <line x1="8" y1="6" x2="16" y2="6"></line>
-    <line x1="16" y1="10" x2="16" y2="10"></line>
-    <line x1="12" y1="10" x2="12" y2="10"></line>
-    <line x1="8" y1="10" x2="8" y2="10"></line>
-    <line x1="16" y1="14" x2="16" y2="14"></line>
-    <line x1="12" y1="14" x2="12" y2="14"></line>
-    <line x1="8" y1="14" x2="8" y2="14"></line>
-    <line x1="16" y1="18" x2="16" y2="18"></line>
-    <line x1="12" y1="18" x2="12" y2="18"></line>
-    <line x1="8" y1="18" x2="8" y2="18"></line>
-    </svg>`;
+            data-pair="${escapedPair}" 
+            data-direction="${escapedDirection}" 
+            data-buy-ex="${escapedBuyEx}" 
+            data-sell-ex="${escapedSellEx}" 
+            data-buy-inst="${escapedBuyInst}" 
+            data-sell-inst="${escapedSellInst}" 
+            data-buy-price="${op.buyPrice}" 
+            data-sell-price="${op.sellPrice}" 
+            title="Abrir Calculadora Detalhada em nova janela">
+            <rect x="4" y="2" width="16" height="20" rx="2"></rect>
+            <line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="10" x2="16" y2="10"></line><line x1="12" y1="10" x2="12" y2="10"></line><line x1="8" y1="10" x2="8" y2="10"></line><line x1="16" y1="14" x2="16" y2="14"></line><line x1="12" y1="14" x2="12" y2="14"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="16" y1="18" x2="16" y2="18"></line><line x1="12" y1="18" x2="12" y2="18"></line><line x1="8" y1="18" x2="8" y2="18"></line>
+        </svg>`;
 
         tableHtml += `<tr>
-      <td class="pair-cell">
-        <span class="favorite-star ${isFavorited ? 'favorited' : 'not-favorited'}" data-op-key="${escapedOpKey}" title="${isFavorited ? 'Desfavoritar' : 'Favoritar'}">${isFavorited ? '★' : '☆'}</span>
-        <span class="block-icon not-blocked" data-op-key="${escapedOpKey}" data-op-data="${opDataForSnapshot}" title="Bloquear">🚫</span>
-        ${openAllIcon}
-        ${getCurrencyIcon(op.pair)}
-        ${escapeHTML(op.pair) || 'N/A'}
-      </td>
-      <td>${compraLink}</td>
-      <td>${vendaLink}</td>
-      <td><div class="profit-cell ${lucroEClass}">${formatDirectProfitPercentage(lucroE_value_as_percentage)}</div></td>
-      <td><div class="profit-cell ${lucroSClass}">${formatDirectProfitPercentage(lucroS_percent)}</div></td>
-      <td><div class="volume-cell">${volumeDisplay}</div></td>
-      <td><div class="funding-cell ${fundingRateClass}">${fundingRateDisplay}</div></td>
-      <td class="qty-cell" title="Qtd. de ${escapeHTML(baseAsset)} para ${currentDefaultCapital.toLocaleString('pt-BR', {style: 'currency', currency: 'USD'})}">${qtyCellContent}</td>
-      <td><div class="time-cell">${formatTimeAgo(firstSeen)}</div></td>
-      <td class="action-cell">
-        ${calculatorIcon}
-      </td>
-    </tr>`;
+            <td class="pair-cell">
+                <span class="favorite-star ${isFavorited ? 'favorited' : 'not-favorited'}" data-op-key="${escapedOpKey}" title="${isFavorited ? 'Desfavoritar' : 'Favoritar'}">${isFavorited ? '★' : '☆'}</span>
+                <span class="block-icon not-blocked" data-op-key="${escapedOpKey}" data-op-data="${opDataForSnapshot}" title="Bloquear">🚫</span>
+                ${openAllIcon}
+                ${getCurrencyIcon(op.pair)}
+                ${escapeHTML(op.pair) || 'N/A'}
+            </td>
+            <td>${compraLink}</td>
+            <td>${vendaLink}</td>
+            <td><div class="profit-cell ${lucroEClass}">${formatDirectProfitPercentage(lucroE_value_as_percentage)}</div></td>
+            <td><div class="profit-cell ${lucroSClass}">${formatDirectProfitPercentage(lucroS_percent)}</div></td>
+            <td><div class="volume-cell">${volumeDisplay}</div></td>
+            <td><div class="funding-cell ${fundingRateClass}">${fundingRateDisplay}</div></td>
+            <td class="qty-cell" title="Qtd. de ${escapeHTML(baseAsset)} para ${currentDefaultCapital.toLocaleString('pt-BR', {style: 'currency', currency: 'USD'})}">${qtyCellContent}</td>
+            <td><div class="time-cell">${formatTimeAgo(firstSeen)}</div></td>
+            <td class="action-cell">
+                ${calculatorIcon}
+            </td>
+        </tr>`;
       } catch (error) {
           console.error("Erro ao renderizar uma linha da tabela:", error);
           console.error("Dados da oportunidade que causou o erro:", opWrapper?.data);
@@ -1389,8 +1367,8 @@ function fetchConfigAndUpdateUI() {
     .catch(err => console.error("FRONTEND: Erro config API:", err));
 }
 
+// CORRIGIDO: Versão unificada da função, sem duplicatas.
 function setupEventListeners() {
-  // Listeners para controles gerais (sidebar, tema, filtros, etc.)
   if (elements.sidebarToggle) elements.sidebarToggle.addEventListener('click', toggleSidebar);
   if (elements.navArbitragens) elements.navArbitragens.addEventListener('click', () => setCurrentView('arbitragens'));
   if (elements.navSaidaOp) elements.navSaidaOp.addEventListener('click', () => setCurrentView('saida-op'));
@@ -1457,7 +1435,7 @@ function setupEventListeners() {
   }
 
   if (soundProfitThresholdInputEl) soundProfitThresholdInputEl.addEventListener('input', () => { state.soundProfitThreshold = parseFloat(soundProfitThresholdInputEl.value) || 0; });
- // Listener GERAL para ações na tabela (delegação de eventos)
+  
   document.addEventListener('click', function(e) {
     const sortableHeader = e.target.closest('.sortable');
     if (sortableHeader) {
@@ -1489,22 +1467,22 @@ function setupEventListeners() {
         }
     }
     
+    // CORRIGIDO: Leitura explícita dos atributos para máxima compatibilidade.
     const calculatorIcon = e.target.closest('.calculator-icon');
-if (calculatorIcon) {
-    // Leitura explícita dos atributos - mais seguro
-    const pair = calculatorIcon.getAttribute('data-pair');
-    const direction = calculatorIcon.getAttribute('data-direction');
-    const buyEx = calculatorIcon.getAttribute('data-buy-ex');
-    const sellEx = calculatorIcon.getAttribute('data-sell-ex');
-    const buyInst = calculatorIcon.getAttribute('data-buy-inst');
-    const sellInst = calculatorIcon.getAttribute('data-sell-inst');
-    const buyPrice = calculatorIcon.getAttribute('data-buy-price');
-    const sellPrice = calculatorIcon.getAttribute('data-sell-price');
+    if (calculatorIcon) {
+        const pair = calculatorIcon.getAttribute('data-pair');
+        const direction = calculatorIcon.getAttribute('data-direction');
+        const buyEx = calculatorIcon.getAttribute('data-buy-ex');
+        const sellEx = calculatorIcon.getAttribute('data-sell-ex');
+        const buyInst = calculatorIcon.getAttribute('data-buy-inst');
+        const sellInst = calculatorIcon.getAttribute('data-sell-inst');
+        const buyPrice = calculatorIcon.getAttribute('data-buy-price');
+        const sellPrice = calculatorIcon.getAttribute('data-sell-price');
 
-    if (pair && direction && buyEx && sellEx && buyInst && sellInst && buyPrice && sellPrice) {
-        abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice, true);
+        if (pair && direction && buyEx && sellEx && buyInst && sellInst && buyPrice && sellPrice) {
+            abrirCalculadora(pair, direction, buyEx, sellEx, buyInst, sellInst, buyPrice, sellPrice, true);
+        }
     }
-}
     
     const favoriteStar = e.target.closest('.favorite-star');
     if (favoriteStar) {
@@ -1529,7 +1507,7 @@ if (calculatorIcon) {
 function init() {
   loadFavorites();
   loadBlockedOps();
-  loadHiddenWatchedOps(); // Carregar combinações ocultas
+  loadHiddenWatchedOps();
   loadWatchedPairs();
   applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
 
@@ -1571,7 +1549,7 @@ window.sortByColumn = sortByColumn;
 window.copiarParaClipboard = copiarParaClipboard;
 window.abrirGraficosComLayout = abrirGraficosComLayout;
 window.abrirCalculadora = abrirCalculadora;
-window.removeWatchedPair = removeWatchedPair; // Expor a nova função
+window.removeWatchedPair = removeWatchedPair;
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -1815,4 +1793,3 @@ function applyFreemiumRestrictions() {
         }
     });
 }
-
