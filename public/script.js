@@ -134,7 +134,7 @@ const filterFundingMinInput = document.getElementById('filter-funding-min');
 const filterFundingMaxInput = document.getElementById('filter-funding-max');
 
 let uiUpdateScheduled = false;
-const UI_UPDATE_INTERVAL_MS = 200;
+const UI_UPDATE_INTERVAL_MS = 500;
 let ws = null;
 
 function escapeHTML(str) {
@@ -349,17 +349,17 @@ function getFilteredOpportunities() {
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
 
         if (state.currentView === 'arbitragens') {
-            if (!(op.netSpreadPercentage > 0 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay)) {
+            if (!(op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay)) {
                 return false;
             }
         } else if (state.currentView === 'saida-op') {
             const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-            if (lucroS === null || lucroS <= 0 || lucroS < state.filters.minProfitSFilterDisplay) {
+            if (lucroS === null || lucroS < state.filters.minProfitSFilterDisplay) {
                 return false;
             }
         } else if (state.currentView === 'ambos-positivos') {
             const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-            if (!(op.netSpreadPercentage > 0 && lucroS > 0)) {
+            if (!(op.netSpreadPercentage >= 0 && lucroS >= 0)) {
                 return false;
             }
         }
@@ -1050,7 +1050,7 @@ function renderOpportunitiesTable() {
 
     if (finalOpportunitiesToRender.length === 0) {
         const message = state.currentView === 'arbitragens' ?
-            'Aguardando oportunidades de arbitragem com lucro de entrada positivo...' :
+            'Nenhuma oportunidade de arbitragem encontrada com os filtros atuais.' :
             'Nenhuma oportunidade com lucro de saída positivo encontrada no momento.';
 
         opportunitiesTableBodyEl.innerHTML = `<tr><td colspan="10" class="no-data">${message}</td></tr>`;
