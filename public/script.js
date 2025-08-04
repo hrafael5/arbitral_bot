@@ -343,6 +343,8 @@ function toggleBlockedOps() {
 function getFilteredOpportunities() {
     let opportunities = state.arbitrageOpportunities.filter(opWrapper => {
         const op = opWrapper.data; 
+        const now = Date.now();
+        if (!opWrapper.isValid || (now - opWrapper.firstSeen > OPPORTUNITY_TTL_MS)) { return false; }
         if (state.watchedPairsList.includes(op.pair)) return false;
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
 
@@ -756,9 +758,11 @@ function formatTimeAgo(timestamp) {
   const seconds = Math.floor(diff / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
   const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
 }
 
 function getCurrencyIcon(pair) {

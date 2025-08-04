@@ -72,16 +72,29 @@ class WebSocketOpportunitySignaler extends OpportunitySignaler {
         
         if (existingIndex > -1) {
             // Se a oportunidade já existe, nós preservamos o timestamp original dela.
-            opportunity.firstSeen = this.opportunities[existingIndex].firstSeen;
+            // No entanto, se a oportunidade não for mais válida, resetamos o firstSeen.
+            if (!opportunity.isValid) {
+                opportunity.firstSeen = 0; // Ou outro valor que indique que não está ativa
+            } else {
+                opportunity.firstSeen = this.opportunities[existingIndex].firstSeen;
+            }
             this.opportunities[existingIndex] = opportunity; // Atualiza com os novos dados de mercado
         } else {
-            // Se for uma oportunidade nova, nós criamos um novo timestamp.
-            opportunity.firstSeen = Date.now();
-            this.opportunities.unshift(opportunity);
-            if (this.opportunities.length > this.maxOpportunities) {
-                this.opportunities.pop();
+            // Se for uma oportunidade nova e válida, nós criamos um novo timestamp.
+            if (opportunity.isValid) {
+                opportunity.firstSeen = Date.now();
+                this.opportunities.unshift(opportunity);
+                if (this.opportunities.length > this.maxOpportunities) {
+                    this.opportunities.pop();
+                }
+            } else {
+                // Se for uma nova oportunidade mas já inválida, não a adicionamos.
+                return;
             }
         }
+
+        // Remove oportunidades que não são mais válidas
+        this.opportunities = this.opportunities.filter(op => op.isValid);
 
         // Envia para os clientes a oportunidade já com o timestamp 'firstSeen' correto.
         broadcastToClients(this.wss, { type: 'opportunity', data: opportunity });
@@ -194,8 +207,8 @@ let marketMonitor;
 // --- 4. DEFINIÇÃO DE ROTAS E LÓGICA DE EXECUÇÃO ---
 
 // A rota do webhook do Stripe precisa vir ANTES do express.json()
-const paymentRoutes = require('./routes/payment.routes');
-app.use('/api/payments', paymentRoutes);
+// const paymentRoutes = require('./routes/payment.routes');
+// app.use('/api/payments', paymentRoutes);
 
 // Agora usamos o express.json() para as outras rotas
 app.use(express.json());
