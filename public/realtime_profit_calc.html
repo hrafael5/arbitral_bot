@@ -216,12 +216,18 @@
         // Função que busca dados ao vivo da janela principal
         function updateWithLiveData() {
             if (!window.opener || window.opener.closed) {
+                console.error("DEBUG: window.opener não disponível ou fechado.");
                 if (window.profitUpdateInterval) clearInterval(window.profitUpdateInterval);
                 return;
             }
             
             const mainState = window.opener.frontendState;
-            if (!mainState || !mainState.allPairsData || !mainState.config) {
+            if (!mainState) {
+                console.error("DEBUG: mainState (window.opener.frontendState) não disponível.");
+                return; // Aguarda o estado principal estar pronto
+            }
+            if (!mainState.allPairsData || !mainState.config) {
+                console.error("DEBUG: mainState.allPairsData ou mainState.config não disponíveis.");
                 return; // Aguarda o estado principal estar pronto
             }
             
@@ -231,22 +237,32 @@
 
                 if (!configEntryBuyEx || !configEntrySellEx) return;
 
-                const feeForEntryBuyOrder = entryBuyInstrument.toUpperCase().includes('SPOT') ? parseFloat(configEntryBuyEx.spotMakerFee) : parseFloat(configEntryBuyEx.futuresMakerFee);
-                const feeForEntrySellOrder = entrySellInstrument.toUpperCase().includes('SPOT') ? parseFloat(configEntrySellEx.spotMakerFee) : parseFloat(configEntrySellEx.futuresMakerFee);
+                const feeForEntryBuyOrder = entryBuyInstrument.toUpperCase().includes(\'SPOT\') ? parseFloat(configEntryBuyEx.spotMakerFee) : parseFloat(configEntryBuyEx.futuresMakerFee);
+                const feeForEntrySellOrder = entrySellInstrument.toUpperCase().includes(\'SPOT\') ? parseFloat(configEntrySellEx.spotMakerFee) : parseFloat(configEntrySellEx.futuresMakerFee);
                 
                 const marketDataForEntryBuyLeg = mainState.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === entryBuyExName.toLowerCase());
                 const marketDataForEntrySellLeg = mainState.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === entrySellExName.toLowerCase());
 
+                if (!marketDataForEntryBuyLeg) {
+                    console.warn(`DEBUG: marketDataForEntryBuyLeg não encontrado para ${pair} em ${entryBuyExName}`);
+                }
+                if (!marketDataForEntrySellLeg) {
+                    console.warn(`DEBUG: marketDataForEntrySellLeg não encontrado para ${pair} em ${entrySellExName}`);
+                }
+
                 if (marketDataForEntryBuyLeg && marketDataForEntrySellLeg) {
-                    const liveBuyPrice = entryBuyInstrument.toUpperCase().includes('SPOT') ? marketDataForEntryBuyLeg.spotPrice : marketDataForEntryBuyLeg.futuresPrice;
-                    const liveSellPrice = entrySellInstrument.toUpperCase().includes('SPOT') ? marketDataForEntrySellLeg.spotBid : marketDataForEntrySellLeg.futuresBid;
+                    const liveBuyPrice = entryBuyInstrument.toUpperCase().includes(\'SPOT\') ? marketDataForEntryBuyLeg.spotPrice : marketDataForEntryBuyLeg.futuresPrice;
+                    const liveSellPrice = entrySellInstrument.toUpperCase().includes(\'SPOT\') ? marketDataForEntrySellLeg.spotBid : marketDataForEntrySellLeg.futuresBid;
                     
+                    console.log("DEBUG: liveBuyPrice:", liveBuyPrice);
+                    console.log("DEBUG: liveSellPrice:", liveSellPrice);
+
                     // Atualiza a exibição de preços ao vivo
                     popupLeg1PriceEl.textContent = formatPriceForDisplay(liveBuyPrice);
                     popupLeg2PriceEl.textContent = formatPriceForDisplay(liveSellPrice);
 
                     // Recalcula e exibe o Lucro E (Entrada) ao vivo
-                    if (typeof liveBuyPrice === 'number' && typeof liveSellPrice === 'number' && liveBuyPrice > 0) {
+                    if (typeof liveBuyPrice === \'number\' && typeof liveSellPrice === \'number\' && liveBuyPrice > 0) {
                         const grossSpread = (liveSellPrice / liveBuyPrice) - 1;
                         const netSpread = (grossSpread - feeForEntryBuyOrder - feeForEntrySellOrder) * 100;
                         formatProfitPercentageForDisplay(netSpread, popupProfitEEl);

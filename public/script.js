@@ -249,6 +249,9 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
     }
 
     if (opDataToUse) {
+        console.log("DEBUG: opDataToUse:", opDataToUse);
+        console.log("DEBUG: buyPrice para calculadora:", opDataToUse.buyPrice);
+        console.log("DEBUG: sellPrice para calculadora:", opDataToUse.sellPrice);
         abrirCalculadora(
             pair, 
             direction, 
@@ -260,6 +263,7 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
             opDataToUse.sellPrice
         );
     } else {
+        console.log("DEBUG: opDataToUse é nulo, passando null para preços.");
         abrirCalculadora(pair, direction, buyExchange, sellExchange, buyInstrument, sellInstrument, null, null);
     }
 
