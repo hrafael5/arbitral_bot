@@ -1,26 +1,17 @@
 @echo off
 echo ==========================================================
-echo [1/4] Enviando atualizações para o GitHub...
+echo [1/3] Enviando atualizações para o GitHub...
 git add .
 git commit -m "Deploy automático"
 git push
 
 echo.
 echo ==========================================================
-echo [2/4] Conectando na VPS e executando comandos como no terminal...
+echo [2/3] Conectando na VPS e executando os comandos...
 
-ssh -tt root@82.29.59.139 ^
-"su - arbflash -l <<EOF
-cd arbitral_bot
-git pull
-npm install
-pm2 restart arbflash-bot
-echo '--- Deploy remoto finalizado ---'
-read -p 'Pressione ENTER para sair...'
-EOF"
+ssh -tt root@82.29.59.139 "su - arbflash -l -c 'cd arbitral_bot && git pull && npm install && pm2 restart arbflash-bot && read -p \"Pressione ENTER para sair...\"'"
 
 echo.
 echo ==========================================================
-echo [3/4] Sessão remota encerrada.
+echo [3/3] Deploy remoto concluído.
 pause
-
