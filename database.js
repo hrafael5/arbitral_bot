@@ -1,5 +1,5 @@
-const { Sequelize } = require("sequelize");
-require("dotenv").config(); // Carrega as variáveis do arquivo .env
+const { Sequelize } = require('sequelize');
+require('dotenv').config(); // Carrega as variáveis do arquivo .env
 
 // Validação para garantir que a URL do banco foi definida no .env
 if (!process.env.DATABASE_URL) {
@@ -7,8 +7,8 @@ if (!process.env.DATABASE_URL) {
 }
 
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
-  dialect: "postgres",
-  protocol: "postgres",
+  dialect: 'postgres',
+  protocol: 'postgres',
   dialectOptions: {
     // Esta configuração é geralmente necessária para conectar a bancos na nuvem como o Render
     ssl: {
@@ -20,5 +20,3 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
 });
 
 module.exports = sequelize;
-
-

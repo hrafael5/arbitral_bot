@@ -325,14 +325,13 @@ async function sendPasswordResetEmail(toEmail, token) {
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
           
           <p style="font-size: 14px; color: #666; text-align: center;">
-            Qualquer dúvida, estamos à disposição!<br>
             Equipe ARBFLASH ⚡
           </p>
         </div>
       </div>
     `,
   };
-
+  
   try {
     const result = await transporter.sendMail(message);
     console.log(`✅ Email de redefinição de senha enviado com sucesso!`);
@@ -344,11 +343,10 @@ async function sendPasswordResetEmail(toEmail, token) {
   }
 }
 
-module.exports = {
-  sendWelcomeEmail,
-  sendFreeWelcomeEmail,
-  sendPremiumUpgradeEmail,
-  sendPasswordResetEmail,
+module.exports = { 
+  sendWelcomeEmail, 
+  sendFreeWelcomeEmail, 
+  sendPremiumUpgradeEmail, 
+  sendPasswordResetEmail 
 };
-
 
