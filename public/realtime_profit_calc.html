@@ -11,8 +11,6 @@
             background-color: #161b22; 
             color: #c9d1d9; 
             font-size: 14px; 
-            min-height: 180px; /* Altura mínima ajustada para o novo tamanho */
-            min-width: 280px; /* Largura mínima para garantir que o conteúdo caiba */
             display: flex; 
             align-items: center; 
             justify-content: center; 
@@ -27,7 +25,7 @@
             border-radius: 8px; 
             box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
             width: 100%; 
-            max-width: 380px; /* Reduzido para um visual mais compacto */
+            max-width: 380px;
             height: auto;
             box-sizing: border-box; 
             display: flex; 
@@ -35,15 +33,15 @@
             align-items: center;
             border: 1px solid #30363d;
         }
-        .pair-header { /* Nome do par um pouco menor para dar destaque ao lucro */
+        .pair-header {
             font-size: 22px; 
-            font-weight: 500; /* Menos bold */
-            margin-bottom: 2px; /* Menos espaço abaixo */
-            color: #adb5bd; /* Cor um pouco mais suave */
+            font-weight: 500;
+            margin-bottom: 2px;
+            color: #adb5bd;
             text-align: center;
         }
         .entry-label {
-            font-size: 10px; /* Ainda menor */
+            font-size: 10px;
             color: #8b949e; 
             margin-bottom: 10px; 
             text-transform: uppercase;
@@ -62,14 +60,14 @@
         .data-column {
             text-align: center;
             flex: 1 1 0; 
-            min-width: 70px; /* Ajustado */
+            min-width: 70px;
         }
         .data-column.center {
             border-left: 1px solid #30363d;
             border-right: 1px solid #30363d;
             padding: 0 8px; 
             margin: 0 3px; 
-            flex: 1.5 1 0; /* Coluna central um pouco mais larga para o lucro */
+            flex: 1.5 1 0;
         }
         .data-column .label {
             font-size: 9px; 
@@ -80,21 +78,18 @@
             white-space: nowrap; 
         }
         .data-column .value {
-            font-size: 16px; /* Tamanho padrão para preços */
+            font-size: 16px;
             font-weight: 500;
             font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
             word-break: break-all; 
         }
-        /* Lucro E em destaque */
         .data-column.center .value#popupProfitE {
-            font-size: 22px; /* Maior para destaque */
-            font-weight: 600; /* Mais bold */
+            font-size: 22px;
+            font-weight: 600;
         }
-
         .profit-value.positive { color: #3fb950; } 
         .profit-value.negative { color: #f85149; } 
         .profit-value.zero { color: #8b949e; }
-
         .sub-profit-container {
             margin-top: 2px; 
         }
@@ -109,7 +104,6 @@
             font-weight: 500;
              font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
         }
-
         .actions-footer {
             display: flex;
             justify-content: center; 
@@ -120,7 +114,7 @@
             border-top: 1px solid #30363d;
         }
         #openChartButton { 
-            padding: 6px 12px; /* Um pouco menor */
+            padding: 6px 12px;
             font-size: 12px;
             cursor: pointer;
             background-color: #238636; 
@@ -133,41 +127,60 @@
         #openChartButton:hover {
             background-color: #2ea043; 
         }
-        
+        .status {
+            position: absolute;
+            bottom: 5px;
+            right: 10px;
+            font-size: 0.8em;
+            color: #666;
+        }
+        .status-dot {
+            height: 8px;
+            width: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .connected { background-color: #26a69a; }
+        .disconnected { background-color: #ef5350; }
     </style>
 </head>
 <body>
     <div class="popup-container">
         <div class="pair-header">
-            <span id="popupPairDisplay">PAR</span>
+            <span id="popupPairDisplay">CARREGANDO</span>
         </div>
         <div class="entry-label">Entrada</div>
         
         <div class="data-row">
             <div class="data-column">
-                <span class="label"><span id="popupLeg1Exchange">EX1</span> (<span id="popupLeg1Instrument">S</span>)</span>
-                <span class="value" id="popupLeg1Price">0.00000</span>
+                <span class="label"><span id="popupLeg1Exchange">--</span> (<span id="popupLeg1Instrument">--</span>)</span>
+                <span class="value" id="popupLeg1Price">...</span>
             </div>
             <div class="data-column center">
                 <span class="label">Lucro E</span>
-                <span class="value profit-value zero" id="popupProfitE">-0.00%</span>
+                <span class="value profit-value zero" id="popupProfitE">...</span>
                 <div class="sub-profit-container">
                     <span class="label-s">Lucro S (Inverso):</span>
-                    <span class="value-s profit-value zero" id="popupProfitS">-0.00%</span>
+                    <span class="value-s profit-value zero" id="popupProfitS">...</span>
                 </div>
             </div>
             <div class="data-column">
-                <span class="label"><span id="popupLeg2Exchange">EX2</span> (<span id="popupLeg2Instrument">F</span>)</span>
-                <span class="value" id="popupLeg2Price">0.00000</span>
+                <span class="label"><span id="popupLeg2Exchange">--</span> (<span id="popupLeg2Instrument">--</span>)</span>
+                <span class="value" id="popupLeg2Price">...</span>
             </div>
         </div>
 
         <div class="actions-footer">
-            <button id="openChartButton">Abrir Gráficos (2)</button>
+            <button id="openChartButton">Abrir Gráficos</button>
         </div>
+    </div>
+    
+    <div class="status">
+        <span id="connection-dot" class="status-dot disconnected"></span>
+        <span id="connection-text"></span>
     </div>
 
     <script src="realtime_profit_calc.js"></script>
 </body>
 </html>
-
