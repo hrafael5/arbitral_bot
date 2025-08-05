@@ -1,174 +1,208 @@
-// --- ESTADO E SELETORES GLOBAIS ---
-const state = {
-    params: {},
-    allPairsData: [],
-    config: null,
-    connected: false,
-};
+let pair = '';
+let originalDirection = ''; 
+let entryBuyExName = 'mexc'; 
+let entrySellExName = 'mexc'; 
+let entryBuyInstrumentIsSpot = true;
+let entrySellInstrumentIsSpot = false;
 
-const elements = {
-    pairDisplay: document.getElementById('popupPairDisplay'),
-    leg1Exchange: document.getElementById('popupLeg1Exchange'),
-    leg1Instrument: document.getElementById('popupLeg1Instrument'),
-    leg1Price: document.getElementById('popupLeg1Price'),
-    profitE: document.getElementById('popupProfitE'),
-    profitS: document.getElementById('popupProfitS'),
-    leg2Exchange: document.getElementById('popupLeg2Exchange'),
-    leg2Instrument: document.getElementById('popupLeg2Instrument'),
-    leg2Price: document.getElementById('popupLeg2Price'),
-    openChartButton: document.getElementById('openChartButton'),
-    connectionDot: document.getElementById('connection-dot'),
-    connectionText: document.getElementById('connection-text'),
-};
+const popupPairDisplayEl = document.getElementById('popupPairDisplay');
+const popupLeg1ExchangeEl = document.getElementById('popupLeg1Exchange');
+const popupLeg1InstrumentEl = document.getElementById('popupLeg1Instrument');
+const popupLeg1PriceEl = document.getElementById('popupLeg1Price');
+const popupProfitEEl = document.getElementById('popupProfitE'); 
+const popupProfitSEl = document.getElementById('popupProfitS'); 
+const popupLeg2ExchangeEl = document.getElementById('popupLeg2Exchange');
+const popupLeg2InstrumentEl = document.getElementById('popupLeg2Instrument');
+const popupLeg2PriceEl = document.getElementById('popupLeg2Price');
 
-// --- FUNÇÕES DE ATUALIZAÇÃO E FORMATAÇÃO ---
+const openChartButtonEl = document.getElementById('openChartButton');
 
-function formatPrice(price) {
-    if (typeof price !== 'number' || isNaN(price)) return '...';
-    const decimals = Math.abs(price) >= 1 ? 4 : 7;
-    return price.toFixed(decimals);
+function formatPriceForDisplay(price, decimals = 7) { 
+    if (typeof price !== 'number' || isNaN(price)) return '-'; 
+    if (price < 0.00001 && price !== 0 && price > -0.00001) return price.toPrecision(3);
+    return price.toFixed(decimals); 
 }
 
-function updateElementText(element, text) {
-    if (element && element.textContent !== text) {
-        element.textContent = text;
-    }
+function getRelevantDecimals(price) {
+    if (price === null || price === undefined || isNaN(price)) return 7;
+    const absPrice = Math.abs(price);
+    if (absPrice >= 100) return 2;
+    if (absPrice >= 1) return 4;
+    if (absPrice >= 0.01) return 5;
+    if (absPrice >= 0.0001) return 6;
+    return 7;
 }
 
-function updateProfitDisplay(element, profit) {
+function formatProfitPercentageForDisplay(profitPercentage, element) {
     if (!element) return;
-    let text = '...';
-    let className = 'profit-value zero';
-    if (typeof profit === 'number' && !isNaN(profit)) {
-        text = (profit >= 0 ? '+' : '') + profit.toFixed(2) + '%';
-        if (profit > 0.009) className = 'profit-value positive';
-        else if (profit < -0.009) className = 'profit-value negative';
+    let textToShow = "Dados...";
+    let baseClassName = element.id === 'popupProfitS' ? 'value-s profit-value' : 'value profit-value';
+    let finalClassName = `${baseClassName} zero`;
+
+    if (typeof profitPercentage === 'number' && !isNaN(profitPercentage)) {
+        textToShow = (profitPercentage >= 0 ? '+' : '') + profitPercentage.toFixed(2) + '%';
+        if (profitPercentage > 0.009) finalClassName = `${baseClassName} positive`;
+        else if (profitPercentage < -0.009) finalClassName = `${baseClassName} negative`;
     }
-    updateElementText(element, text);
-    element.className = element.id.includes('popupProfitS') ? `value-s ${className}` : `value ${className}`;
+    element.textContent = textToShow;
+    element.className = finalClassName;
 }
 
-// --- FUNÇÕES DE CÁLCULO ---
+function calculateLucroS_PopUp(mainState) {
+    if (!mainState || !mainState.allPairsData || !mainState.config || !mainState.config.exchanges) {
+        return NaN;
+    }
+    const configForS_BuyLeg = mainState.config.exchanges[entrySellExName.toLowerCase()]; 
+    const configForS_SellLeg = mainState.config.exchanges[entryBuyExName.toLowerCase()]; 
 
-function getFee(exchange, instrument) {
-    const exConf = state.config.exchanges[exchange.toLowerCase()];
-    if (!exConf) return 0;
-    return instrument.toUpperCase().includes('SPOT') ? (exConf.spotMakerFee || 0) : (exConf.futuresMakerFee || 0);
-}
-
-function calculateAndDisplay() {
-    if (!state.params.pair || !state.config || !state.allPairsData.length) return;
-
-    const { pair, buyEx, sellEx, buyInst, sellInst } = state.params;
-    
-    const marketBuyData = state.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === buyEx.toLowerCase());
-    const marketSellData = state.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === sellEx.toLowerCase());
-
-    if (!marketBuyData || !marketSellData) return;
-
-    // Calcula Lucro de Entrada (E)
-    const entryPriceBuy = buyInst.toUpperCase().includes('SPOT') ? marketBuyData.spotPrice : marketBuyData.futuresPrice;
-    const entryPriceSell = sellInst.toUpperCase().includes('SPOT') ? marketSellData.spotBid : marketSellData.futuresBid;
-    
-    updateElementText(elements.leg1Price, formatPrice(entryPriceBuy));
-    updateElementText(elements.leg2Price, formatPrice(entryPriceSell));
-    
-    if (entryPriceBuy > 0) {
-        const feeBuy = getFee(buyEx, buyInst);
-        const feeSell = getFee(sellEx, sellInst);
-        const profitE = ((entryPriceSell / entryPriceBuy) - 1 - feeBuy - feeSell) * 100;
-        updateProfitDisplay(elements.profitE, profitE);
+    if (!configForS_BuyLeg || !configForS_SellLeg) {
+        console.warn(`[CalcPopUpS] Config de taxas não encontrada para ${entrySellExName} ou ${entryBuyExName} (para Lucro S)`);
+        return NaN;
     }
 
-    // Calcula Lucro de Saída (S - Inverso)
-    const exitPriceBuy = sellInst.toUpperCase().includes('SPOT') ? marketSellData.spotPrice : marketSellData.futuresPrice;
-    const exitPriceSell = buyInst.toUpperCase().includes('SPOT') ? marketBuyData.spotBid : marketBuyData.futuresBid;
-    
-    if (exitPriceBuy > 0) {
-        const feeExitBuy = getFee(sellEx, sellInst);
-        const feeExitSell = getFee(buyEx, buyInst);
-        const profitS = ((exitPriceSell / exitPriceBuy) - 1 - feeExitBuy - feeExitSell) * 100;
-        updateProfitDisplay(elements.profitS, profitS);
+    const marketDataForS_BuyLeg = mainState.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === entrySellExName.toLowerCase());
+    const marketDataForS_SellLeg = mainState.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === entryBuyExName.toLowerCase());
+
+    if (!marketDataForS_BuyLeg || !marketDataForS_SellLeg) return NaN;
+
+    let price_S_Buy, fee_S_Buy;
+    if (entrySellInstrumentIsSpot) {
+        price_S_Buy = marketDataForS_BuyLeg.spotPrice; 
+        fee_S_Buy = parseFloat(configForS_BuyLeg.spotMakerFee);
+    } else {
+        price_S_Buy = marketDataForS_BuyLeg.futuresPrice; 
+        fee_S_Buy = parseFloat(configForS_BuyLeg.futuresMakerFee);
     }
+
+    let price_S_Sell, fee_S_Sell;
+    if (entryBuyInstrumentIsSpot) {
+        price_S_Sell = marketDataForS_SellLeg.spotBid; 
+        fee_S_Sell = parseFloat(configForS_SellLeg.spotMakerFee);
+    } else {
+        price_S_Sell = marketDataForS_SellLeg.futuresBid; 
+        fee_S_Sell = parseFloat(configForS_SellLeg.futuresMakerFee);
+    }
+    
+    if (isNaN(fee_S_Buy)) fee_S_Buy = 0;
+    if (isNaN(fee_S_Sell)) fee_S_Sell = 0;
+
+    if (typeof price_S_Buy === 'number' && typeof price_S_Sell === 'number' && price_S_Buy > 0 && !isNaN(price_S_Buy) && !isNaN(price_S_Sell)) {
+        const grossSpreadS = (price_S_Sell / price_S_Buy) - 1;
+        const netSpreadS = grossSpreadS - fee_S_Buy - fee_S_Sell; 
+        return netSpreadS * 100; 
+    }
+    return NaN;
 }
 
-// --- LÓGICA DE CONEXÃO E INICIALIZAÇÃO ---
-
-function updateConnectionStatus(connected) {
-    state.connected = connected;
-    elements.connectionDot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
-    updateElementText(elements.connectionText, connected ? 'Conectado' : 'Desconectado');
-}
-
-function connectWebSocket() {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}`;
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => updateConnectionStatus(true);
-    ws.onclose = () => {
-        updateConnectionStatus(false);
-        setTimeout(connectWebSocket, 5000);
-    };
-    ws.onerror = (err) => {
-        console.error("WebSocket Error:", err);
-        updateConnectionStatus(false);
-        ws.close();
-    };
-    ws.onmessage = (event) => {
-        try {
-            const message = JSON.parse(event.data);
-            if (message.type === "all_pairs_update") {
-                state.allPairsData = message.data || [];
-                calculateAndDisplay();
-            }
-        } catch (error) {
-            console.error("Erro ao processar mensagem:", error);
-        }
-    };
-}
-
-async function initialize() {
-    const params = new URLSearchParams(window.location.search);
-    state.params = {
-        pair: params.get("pair"),
-        buyEx: params.get("buyEx"),
-        sellEx: params.get("sellEx"),
-        buyInst: params.get("buyInst"),
-        sellInst: params.get("sellInst")
-    };
-
-    if (!state.params.pair) {
-        document.body.innerHTML = "<h1>Erro: Parâmetros insuficientes.</h1>";
+function updatePopupDisplay() {
+    if (window.opener && window.opener.closed) {
+        formatProfitPercentageForDisplay(NaN, popupProfitEEl);
+        formatProfitPercentageForDisplay(NaN, popupProfitSEl);
+        if (window.profitUpdateInterval) clearInterval(window.profitUpdateInterval);
+        return;
+    }
+    
+    const mainState = window.opener && window.opener.frontendState; 
+    if (!mainState || !mainState.allPairsData || !mainState.config || !mainState.config.exchanges) {
+        formatProfitPercentageForDisplay(NaN, popupProfitEEl);
+        formatProfitPercentageForDisplay(NaN, popupProfitSEl);
         return;
     }
 
-    document.title = `Detalhes: ${state.params.pair}`;
-    updateElementText(elements.pairDisplay, state.params.pair.split('/')[0]);
-    updateElementText(elements.leg1Exchange, state.params.buyEx);
-    updateElementText(elements.leg1Instrument, state.params.buyInst.includes('spot') ? 'S' : 'F');
-    updateElementText(elements.leg2Exchange, state.params.sellEx);
-    updateElementText(elements.leg2Instrument, state.params.sellInst.includes('spot') ? 'S' : 'F');
-
-    elements.openChartButton.addEventListener("click", () => {
-        if (window.opener && typeof window.opener.abrirGraficosComLayout === "function") {
-            window.opener.abrirGraficosComLayout(
-                state.params.buyEx, state.params.buyInst,
-                state.params.sellEx, state.params.sellInst,
-                state.params.pair, "entry", ""
-            );
-        }
-    });
-
     try {
-        const response = await fetch('/api/config');
-        if (!response.ok) throw new Error('Falha ao buscar config');
-        state.config = await response.json();
-        connectWebSocket();
-    } catch (error) {
-        console.error("Erro na inicialização:", error);
-        updateElementText(elements.pairDisplay, "ERRO");
+        const configEntryBuyEx = mainState.config.exchanges[entryBuyExName.toLowerCase()];
+        const configEntrySellEx = mainState.config.exchanges[entrySellExName.toLowerCase()];
+
+        if (!configEntryBuyEx || !configEntrySellEx) {
+            console.warn(`[CalcPopUpNew] Config de taxas não encontrada para ${entryBuyExName} ou ${entrySellExName}`);
+            formatProfitPercentageForDisplay(NaN, popupProfitEEl);
+            formatProfitPercentageForDisplay(NaN, popupProfitSEl);
+            return;
+        }
+        
+        const feeForEntryBuyOrder = entryBuyInstrumentIsSpot ? parseFloat(configEntryBuyEx.spotMakerFee) : parseFloat(configEntryBuyEx.futuresMakerFee);
+        const feeForEntrySellOrder = entrySellInstrumentIsSpot ? parseFloat(configEntrySellEx.spotMakerFee) : parseFloat(configEntrySellEx.futuresMakerFee);
+        
+        const marketDataForEntryBuyLeg = mainState.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === entryBuyExName.toLowerCase());
+        const marketDataForEntrySellLeg = mainState.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === entrySellExName.toLowerCase());
+
+        if (marketDataForEntryBuyLeg && marketDataForEntrySellLeg) {
+            const priceToBuyEntry = entryBuyInstrumentIsSpot ? marketDataForEntryBuyLeg.spotPrice : marketDataForEntryBuyLeg.futuresPrice; 
+            const priceToSellEntry = entrySellInstrumentIsSpot ? marketDataForEntrySellLeg.spotBid : marketDataForEntrySellLeg.futuresBid; 
+            
+            let netSpreadMakerEntry = NaN;
+            if (typeof priceToBuyEntry === 'number' && typeof priceToSellEntry === 'number' && priceToBuyEntry > 0 && !isNaN(priceToBuyEntry) && !isNaN(priceToSellEntry)) {
+                const grossSpreadMaker = (priceToSellEntry / priceToBuyEntry) - 1;
+                netSpreadMakerEntry = grossSpreadMaker - feeForEntryBuyOrder - feeForEntrySellOrder;
+            }
+            formatProfitPercentageForDisplay(netSpreadMakerEntry * 100, popupProfitEEl);
+            
+            const netSpreadMakerS_percentage = calculateLucroS_PopUp(mainState);
+            formatProfitPercentageForDisplay(netSpreadMakerS_percentage, popupProfitSEl);
+
+            if (popupPairDisplayEl) popupPairDisplayEl.textContent = pair.split('/')[0];
+            if (popupLeg1ExchangeEl) popupLeg1ExchangeEl.textContent = entryBuyExName.length > 4 ? entryBuyExName.substring(0,4).toUpperCase() : entryBuyExName.toUpperCase();
+            if (popupLeg1InstrumentEl) popupLeg1InstrumentEl.textContent = entryBuyInstrumentIsSpot ? 'S' : 'F';
+            if (popupLeg1PriceEl) popupLeg1PriceEl.textContent = formatPriceForDisplay(priceToBuyEntry, getRelevantDecimals(priceToBuyEntry));
+            if (popupLeg2ExchangeEl) popupLeg2ExchangeEl.textContent = entrySellExName.length > 4 ? entrySellExName.substring(0,4).toUpperCase() : entrySellExName.toUpperCase();
+            if (popupLeg2InstrumentEl) popupLeg2InstrumentEl.textContent = entrySellInstrumentIsSpot ? 'S' : 'F';
+            if (popupLeg2PriceEl) popupLeg2PriceEl.textContent = formatPriceForDisplay(priceToSellEntry, getRelevantDecimals(priceToSellEntry));
+            
+        } else {
+            formatProfitPercentageForDisplay(NaN, popupProfitEEl);
+            formatProfitPercentageForDisplay(NaN, popupProfitSEl);
+            if (popupLeg1PriceEl) popupLeg1PriceEl.textContent = "Dados?";
+            if (popupLeg2PriceEl) popupLeg2PriceEl.textContent = "Dados?";
+        }
+    } catch (e) {
+        console.error("[CalcPopUpNew] Erro durante updatePopupDisplay:", e);
+        formatProfitPercentageForDisplay(NaN, popupProfitEEl);
+        formatProfitPercentageForDisplay(NaN, popupProfitSEl);
+        if (popupProfitEEl) popupProfitEEl.textContent = "Erro";
     }
 }
 
-document.addEventListener('DOMContentLoaded', initialize);
+window.onload = () => {
+    const params = new URLSearchParams(window.location.search);
+    pair = params.get('pair'); 
+    originalDirection = params.get('direction'); 
+    
+    entryBuyExName = params.get('buyEx') || 'mexc'; 
+    entrySellExName = params.get('sellEx') || 'mexc'; 
+
+    if (originalDirection) {
+        const dirParts = originalDirection.toLowerCase().split('/');
+        if (dirParts.length === 2) {
+            const buyLegFullDesc = dirParts[0].trim(); 
+            entryBuyInstrumentIsSpot = buyLegFullDesc.includes("spot");
+            const sellLegFullDesc = dirParts[1].trim(); 
+            entrySellInstrumentIsSpot = sellLegFullDesc.includes("spot");
+        }
+    }
+
+    updatePopupDisplay();
+    window.profitUpdateInterval = setInterval(updatePopupDisplay, 1000);
+
+    openChartButtonEl.addEventListener('click', () => {
+        if (window.opener && window.opener.abrirGraficosComLayout) {
+            window.opener.abrirGraficosComLayout(
+                entryBuyExName, 
+                entryBuyInstrumentIsSpot ? 'spot' : 'futures', 
+                entrySellExName, 
+                entrySellInstrumentIsSpot ? 'spot' : 'futures', 
+                pair, 
+                originalDirection, 
+                '' 
+            );
+        } else {
+            console.warn("FRONTEND: window.opener ou abrirGraficosComLayout não disponível.");
+        }
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (window.profitUpdateInterval) {
+            clearInterval(window.profitUpdateInterval);
+        }
+    });
+};
+
