@@ -3,7 +3,7 @@ require('dotenv').config();
 
 // --- 1. DEPENDÊNCIAS ---
 const express = require('express');
-const http = require('http');
+const http = require('http' );
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -25,13 +25,19 @@ const OpportunitySignaler = require('./lib/OpportunitySignaler');
 
 // --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES ---
 
+// ==================================================================================
+// --- CORREÇÃO APLICADA AQUI ---
+// A função broadcastToClients foi simplificada para remover qualquer filtro do lado do servidor.
+// Agora, ela envia TODAS as oportunidades para os clientes conectados, e o frontend
+// (script.js) fica 100% responsável por decidir o que exibir com base nos filtros da tela.
+// Isso elimina a possibilidade de o servidor estar bloqueando dados indevidamente.
+// ==================================================================================
 const broadcastToClients = (wssInstance, data) => {
     if (!wssInstance || !wssInstance.clients) return;
     wssInstance.clients.forEach(c => {
+        // A única verificação é se o cliente está conectado e autenticado.
         if (c.readyState === WebSocket.OPEN && c.userId) {
-            if (data.type === 'opportunity' && c.subscriptionStatus === 'free' && data.data.netSpreadPercentage >= 1.0) {
-                return;
-            }
+            // Envia os dados diretamente, sem filtros de status de assinatura.
             c.send(JSON.stringify(data));
         }
     });
@@ -66,24 +72,18 @@ class WebSocketOpportunitySignaler extends OpportunitySignaler {
     }
     signal(opportunity) {
         super.signal(opportunity);
-
-        // --- LÓGICA CORRIGIDA PARA O TIMESTAMP 'firstSeen' ---
         const existingIndex = this.opportunities.findIndex(op => op.pair === opportunity.pair && op.direction === opportunity.direction);
         
         if (existingIndex > -1) {
-            // Se a oportunidade já existe, nós preservamos o timestamp original dela.
             opportunity.firstSeen = this.opportunities[existingIndex].firstSeen;
-            this.opportunities[existingIndex] = opportunity; // Atualiza com os novos dados de mercado
+            this.opportunities[existingIndex] = opportunity;
         } else {
-            // Se for uma oportunidade nova, nós criamos um novo timestamp.
             opportunity.firstSeen = Date.now();
             this.opportunities.unshift(opportunity);
             if (this.opportunities.length > this.maxOpportunities) {
                 this.opportunities.pop();
             }
         }
-
-        // Envia para os clientes a oportunidade já com o timestamp 'firstSeen' correto.
         broadcastToClients(this.wss, { type: 'opportunity', data: opportunity });
     }
     getOpportunities() { 
@@ -143,9 +143,8 @@ async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
 
 const config = ini.parse(fs.readFileSync(path.resolve(__dirname, "conf.ini"), "utf-8"));
 const app = express();
-const server = http.createServer(app);
+const server = http.createServer(app );
 
-// Configuração do CORS para ser mais restritivo em produção
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://app.arbflash.com', 'https://arbflash.com'] 
@@ -153,8 +152,8 @@ const corsOptions = {
   credentials: true
 };
 
-app.set('trust proxy', 1);
-app.use(helmet()); // Adiciona cabeçalhos de segurança
+app.set('trust proxy', 1 );
+app.use(helmet());
 app.use(cors(corsOptions));
 app.use(compression());
 
@@ -171,7 +170,7 @@ const sessionMiddleware = session({
         maxAge: 7 * 24 * 60 * 60 * 1000,
         sameSite: 'lax'
     }
-});
+} );
 app.use(sessionMiddleware);
 
 const wss = new WebSocket.Server({ noServer: true });
@@ -193,16 +192,12 @@ let marketMonitor;
 
 // --- 4. DEFINIÇÃO DE ROTAS E LÓGICA DE EXECUÇÃO ---
 
-// A rota do webhook do Stripe precisa vir ANTES do express.json()
 const paymentRoutes = require('./routes/payment.routes');
 app.use('/api/payments', paymentRoutes);
 
-// Agora usamos o express.json() para as outras rotas
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
-// Servir os ficheiros estáticos da pasta 'public'
 app.use(express.static(path.join(__dirname, 'public')));
 
 const userRoutes = require('./routes/user.routes');
@@ -262,27 +257,11 @@ wss.on("connection", async (wsClient) => {
     logger.info(`User ${wsClient.userId} connected via WebSocket.`);
     try {
         const user = await User.findByPk(wsClient.userId);
-        if (user) {
-            wsClient.subscriptionStatus = user.subscriptionStatus;
-            logger.info(`User ${wsClient.userId} subscription status: ${wsClient.subscriptionStatus}`);
-            
-            // Ativação automática de estratégias premium
-            if (user.subscriptionStatus === 'premium') {
-                config.arbitrage.enable_futures_vs_futures = true;
-                config.arbitrage.enable_spot_vs_spot = true;
-                logger.info(`Premium strategies automatically enabled for user ${wsClient.userId}`);
-            }
-        } else {
-            logger.warn(`User ${wsClient.userId} not found in database.`);
-            wsClient.subscriptionStatus = 'free';
-        }
+        wsClient.subscriptionStatus = user ? user.subscriptionStatus : 'free';
+        logger.info(`User ${wsClient.userId} subscription status set to: ${wsClient.subscriptionStatus}`);
 
-        const initialOpportunities = opportunitySignaler.getOpportunities().filter(op => {
-            if (wsClient.subscriptionStatus === 'free' && op.netSpreadPercentage >= 1.0) {
-                return false;
-            }
-            return true;
-        });
+        // O filtro de envio inicial também foi removido para consistência com a correção principal.
+        const initialOpportunities = opportunitySignaler.getOpportunities();
         wsClient.send(JSON.stringify({ type: 'opportunities', data: initialOpportunities }));
 
         if (marketMonitor) wsClient.send(JSON.stringify({ type: 'all_pairs_update', data: marketMonitor.getAllMarketData() }));
@@ -347,10 +326,8 @@ const shutdown = () => {
 
 // --- 5. ROTA PRINCIPAL E TRATAMENTO DE ERROS ---
 
-// Rota para servir a página principal após todas as outras rotas da API
 app.get('/', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-// Middleware de tratamento de erros global (deve ser o último)
 app.use((err, req, res, next) => {
   console.error("ERRO INESPERADO:", err.stack);
   res.status(500).json({ message: "Ocorreu um erro inesperado no servidor." });
