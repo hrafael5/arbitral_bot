@@ -706,7 +706,6 @@ function formatRatioAsProfitPercentage(ratioDecimal) {
   return (percentageValue >= 0 ? '+' : '') + percentageValue.toFixed(4) + '%';
 }
 
-// <-- ALTERAÇÃO AQUI: Função de tempo agora mostra minutos e segundos.
 function formatTimeAgo(timestamp) {
     if (!timestamp) return "N/A";
     const diff = Date.now() - timestamp;
@@ -1254,6 +1253,21 @@ function cleanupStaleOpportunities() {
     if (originalCount > state.arbitrageOpportunities.length) {
         requestUiUpdate();
     }
+}
+
+function fetchConfigAndUpdateUI() {
+  fetch(`${window.location.origin}/api/config`)
+    .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP error ${res.status}`)))
+    .then(configData => {
+      Object.assign(state.config.exchanges.mexc, configData.exchanges?.mexc);
+      Object.assign(state.config.exchanges.gateio, configData.exchanges?.gateio);
+      Object.assign(state.config.arbitrage, configData.arbitrage);
+      state.config.monitoredPairs = configData.monitoredPairs || [];
+      if (filterEnableFutFutEl) filterEnableFutFutEl.checked = state.config.arbitrage.enableFuturesVsFutures;
+      if (filterEnableSpotSpotEl) filterEnableSpotSpotEl.checked = state.config.arbitrage.enableSpotVsSpot;
+      requestUiUpdate();
+    })
+    .catch(err => console.error("FRONTEND: Erro config API:", err));
 }
 
 function connectWebSocket() {
