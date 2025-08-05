@@ -1,22 +1,22 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const User = require('../models/user.model');
-require('dotenv').config();
+const User = require("../models/user.model");
+require("dotenv").config();
 
 // Serviços de email
-const { sendWelcomeEmail, sendPremiumUpgradeEmail } = require('../utils/emailService');
+const { sendWelcomeEmail, sendPremiumUpgradeEmail } = require("../utils/emailService");
 
 // Inicializar o Stripe com a sua chave secreta do .env
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // Função para gerar senha temporária que atende aos critérios de validação
 function generateStrongTempPassword() {
-    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const numbers = '0123456789';
-    const symbols = '!@#$%&*';
+    const lowercase = "abcdefghijklmnopqrstuvwxyz";
+    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const numbers = "0123456789";
+    const symbols = "!@#$%&*";
     
-    let password = '';
+    let password = "";
     password += lowercase[Math.floor(Math.random() * lowercase.length)];
     password += uppercase[Math.floor(Math.random() * uppercase.length)];
     password += numbers[Math.floor(Math.random() * numbers.length)];
@@ -27,7 +27,7 @@ function generateStrongTempPassword() {
         password += allChars[Math.floor(Math.random() * allChars.length)];
     }
     
-    return password.split('').sort(() => Math.random() - 0.5).join('');
+    return password.split("").sort(() => Math.random() - 0.5).join("");
 }
 
 // Função para converter timestamp do Stripe para data válida
@@ -49,16 +49,16 @@ function convertStripeTimestamp(timestamp) {
 }
 
 // ROTA 1: CRIAR A SESSÃO DE CHECKOUT
-router.post('/create-checkout-session', async (req, res) => {
+router.post("/create-checkout-session", async (req, res) => {
     try {
         const priceId = process.env.STRIPE_PRICE_ID; // Usar variável de ambiente para o ID do preço
 
         const sessionPayload = {
-            payment_method_types: ['card'],
-            mode: 'subscription',
+            payment_method_types: ["card"],
+            mode: "subscription",
             line_items: [{ price: priceId, quantity: 1 }],
-            success_url: `${process.env.APP_BASE_URL || 'https://app.arbflash.com'}?payment_success=true`,
-            cancel_url: `${process.env.APP_BASE_URL || 'https://app.arbflash.com'}?payment_canceled=true`,
+            success_url: `${process.env.APP_BASE_URL || "https://app.arbflash.com"}?payment_success=true`,
+            cancel_url: `${process.env.APP_BASE_URL || "https://app.arbflash.com"}?payment_canceled=true`,
             metadata: {}
         };
 
@@ -75,14 +75,14 @@ router.post('/create-checkout-session', async (req, res) => {
 
     } catch (error) {
         console.error("Erro ao criar sessão de checkout:", error);
-        res.status(500).json({ message: 'Erro ao iniciar o pagamento.' });
+        res.status(500).json({ message: "Erro ao iniciar o pagamento." });
     }
 });
 
 
 // ROTA 2: RECEBER OS WEBHOOKS DO STRIPE
-router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-    const sig = req.headers['stripe-signature'];
+router.post("/stripe-webhook", express.raw({ type: "application/json" }), async (req, res) => {
+    const sig = req.headers["stripe-signature"];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     let event;
@@ -98,13 +98,13 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
 
     // Lidar com o evento
     switch (event.type) {
-        case 'checkout.session.completed': {
+        case "checkout.session.completed": {
             const session = event.data.object;
             const stripeCustomerId = session.customer;
             const stripeSubscriptionId = session.subscription;
             
             const customerEmail = session.customer_details.email.toLowerCase();
-            const customerName = session.customer_details.name || 'Novo Assinante';
+            const customerName = session.customer_details.name || "Novo Assinante";
             
             try {
                 const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
@@ -112,7 +112,7 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
                 const periodEndDate = convertStripeTimestamp(subscription.current_period_end);
 
                 const userData = {
-                    subscriptionStatus: 'active',
+                    subscriptionStatus: "active",
                     stripeCustomerId: stripeCustomerId,
                     stripeSubscriptionId: stripeSubscriptionId,
                     stripePriceId: subscription.items.data[0].price.id,
@@ -152,15 +152,15 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
             break;
         }
 
-        case 'customer.subscription.updated':
-        case 'customer.subscription.deleted': {
+        case "customer.subscription.updated":
+        case "customer.subscription.deleted": {
             const subscription = event.data.object;
             const stripeCustomerId = subscription.customer;
 
             // LÓGICA DE DOWNGRADE AUTOMÁTICO
-            let newStatus = 'free'; // Padrão é reverter para 'free'
-            if (subscription.status === 'active' || subscription.status === 'trialing') {
-                newStatus = 'active'; // Apenas 'active' ou 'trialing' são considerados premium
+            let newStatus = "free"; // Padrão é reverter para "free"
+            if (subscription.status === "active" || subscription.status === "trialing") {
+                newStatus = "active"; // Apenas "active" ou "trialing" são considerados premium
             }
 
             console.log(`🔄 Assinatura atualizada para o cliente ${stripeCustomerId}. Status no Stripe: ${subscription.status}. Status no sistema será: ${newStatus}.`);
@@ -187,3 +187,4 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
 });
 
 module.exports = router;
+

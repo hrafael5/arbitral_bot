@@ -1,11 +1,11 @@
 // models/user.model.js (Revisado)
 
-const { DataTypes } = require('sequelize');
-const sequelize = require('../database');
-const bcrypt = require('bcrypt');
-const crypto = require('crypto'); // Importar crypto para os tokens
+const { DataTypes } = require("sequelize");
+const sequelize = require("../database");
+const bcrypt = require("bcrypt");
+const crypto = require("crypto"); // Importar crypto para os tokens
 
-const User = sequelize.define('User', {
+const User = sequelize.define("User", {
   name: {
     type: DataTypes.STRING,
     allowNull: false, // Alterado para false, pois o nome é obrigatório
@@ -28,7 +28,7 @@ const User = sequelize.define('User', {
     allowNull: true,
     validate: {
       isValidWhatsApp(value) {
-        if (value && !/^\+?[\d\s\-\(\)]{10,}$/.test(value.replace(/\s/g, ''))) {
+        if (value && !/^\+?[\d\s\-\(\)]{10,}$/.test(value.replace(/\s/g, ""))) {
           throw new Error("Por favor, insira um número de WhatsApp válido.");
         }
       }
@@ -54,10 +54,10 @@ const User = sequelize.define('User', {
   },
   subscriptionStatus: {
     type: DataTypes.STRING,
-    defaultValue: 'free',
+    defaultValue: "free",
     validate: {
       isIn: {
-        args: [['free', 'premium', 'active', 'canceled', 'incomplete']],
+        args: [["free", "premium", "active", "canceled", "incomplete"]],
         msg: "Status de assinatura inválido."
       }
     }
@@ -121,13 +121,13 @@ const User = sequelize.define('User', {
       }
     },
     beforeUpdate: async (user) => {
-      if (user.changed('password')) {
+      if (user.changed("password")) {
         const salt = await bcrypt.genSalt(12);
         user.password = await bcrypt.hash(user.password, salt);
       }
     }
   },
-  indexes: [{ unique: true, fields: ['email'] }]
+  indexes: [{ unique: true, fields: ["email"] }]
 });
 
 // --- MÉTODOS DE INSTÂNCIA APRIMORADOS ---
@@ -168,12 +168,12 @@ User.prototype.resetLoginAttempts = function() {
  * @returns {string} O token não hasheado para ser enviado por e-mail.
  */
 User.prototype.generateEmailVerificationToken = function() {
-  const token = crypto.randomBytes(32).toString('hex');
+  const token = crypto.randomBytes(32).toString("hex");
   
   this.emailVerificationToken = crypto
-    .createHash('sha256')
+    .createHash("sha256")
     .update(token)
-    .digest('hex');
+    .digest("hex");
     
   this.emailVerificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas
   
@@ -181,12 +181,12 @@ User.prototype.generateEmailVerificationToken = function() {
 };
 
 User.prototype.generatePasswordResetToken = function() {
-  const token = crypto.randomBytes(32).toString('hex');
+  const token = crypto.randomBytes(32).toString("hex");
 
   this.resetToken = crypto
-    .createHash('sha256')
+    .createHash("sha256")
     .update(token)
-    .digest('hex');
+    .digest("hex");
 
   this.resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
 
@@ -194,3 +194,4 @@ User.prototype.generatePasswordResetToken = function() {
 };
 
 module.exports = User;
+

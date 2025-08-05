@@ -1,7 +1,7 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../database');
+const { DataTypes } = require("sequelize");
+const sequelize = require("../database");
 
-const UserConfiguration = sequelize.define('UserConfiguration', {
+const UserConfiguration = sequelize.define("UserConfiguration", {
   // --- Configurações Críticas ---
   mexcApiKey: {
     type: DataTypes.STRING,
@@ -30,12 +30,12 @@ const UserConfiguration = sequelize.define('UserConfiguration', {
   // Armazenamos a lista como um texto no formato JSON
   watchedPairs: {
     type: DataTypes.TEXT,
-    defaultValue: '[]', // Padrão é uma lista vazia
+    defaultValue: "[]", // Padrão é uma lista vazia
     get() {
-      const rawValue = this.getDataValue('watchedPairs');
+      const rawValue = this.getDataValue("watchedPairs");
       // Garante que o valor retornado seja sempre um array
       try {
-        const parsed = JSON.parse(rawValue || '[]');
+        const parsed = JSON.parse(rawValue || "[]");
         return Array.isArray(parsed) ? parsed : [];
       } catch (e) {
         return [];
@@ -43,7 +43,7 @@ const UserConfiguration = sequelize.define('UserConfiguration', {
     },
     set(value) {
       // Garante que estamos salvando um string JSON de um array
-      this.setDataValue('watchedPairs', JSON.stringify(Array.isArray(value) ? value : []));
+      this.setDataValue("watchedPairs", JSON.stringify(Array.isArray(value) ? value : []));
     }
   },
 
@@ -70,3 +70,4 @@ const UserConfiguration = sequelize.define('UserConfiguration', {
 });
 
 module.exports = UserConfiguration;
+

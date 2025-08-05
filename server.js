@@ -260,7 +260,7 @@ app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: conf
 server.on('upgrade', (request, socket, head) => {
     sessionMiddleware(request, {}, () => {
         if (!request.session.userId) {
-            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+            socket.write('HTTP/1.1 401 Unauthorized\\r\\n\\r\\n');
             socket.destroy();
             return;
         }
@@ -381,3 +381,4 @@ sequelize.sync({ alter: true })
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+

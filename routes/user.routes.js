@@ -28,13 +28,13 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ message: "Nome, email e senha são obrigatórios." });
     }
 
-    // Criar novo usuário com o status 'free'
+    // Criar novo usuário com o status "free"
     const newUser = await User.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
       whatsapp: whatsapp ? whatsapp.trim() : null,
       password,
-      subscriptionStatus: 'free' // <-- CORREÇÃO PRINCIPAL
+      subscriptionStatus: "free" // <-- CORREÇÃO PRINCIPAL
     });
     console.log(`✅ Novo usuário criado: ${newUser.id} - ${newUser.email}`);
 
@@ -57,7 +57,7 @@ router.post("/register", async (req, res) => {
   } catch (error) {
     console.error("Erro no cadastro:", error);
     if (error.name === "SequelizeValidationError") {
-      return res.status(400).json({ message: error.errors.map(e => e.message).join(', ') });
+      return res.status(400).json({ message: error.errors.map(e => e.message).join(", ") });
     }
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(409).json({ message: "Este email já está cadastrado." });
@@ -107,7 +107,7 @@ router.post("/logout", (req, res) => {
     if (err) {
       return res.status(500).json({ message: "Não foi possível fazer logout." });
     }
-    res.clearCookie('connect.sid');
+    res.clearCookie("connect.sid");
     res.json({ message: "Logout realizado com sucesso!" });
   });
 });
@@ -116,7 +116,7 @@ router.post("/logout", (req, res) => {
 router.get("/me", isAuthenticated, async (req, res) => {
   try {
     const user = await User.findByPk(req.session.userId, {
-      attributes: { exclude: ['password', 'resetToken', 'resetTokenExpiry', 'emailVerificationToken', 'emailVerificationExpiry'] }
+      attributes: { exclude: ["password", "resetToken", "resetTokenExpiry", "emailVerificationToken", "emailVerificationExpiry"] }
     });
     if (!user) {
       req.session.destroy();
@@ -223,13 +223,13 @@ router.put("/change-password", isAuthenticated, async (req, res) => {
       return res.status(400).json({ message: "Senha atual incorreta." });
     }
 
-    user.password = newPassword; // O hook 'beforeUpdate' no modelo irá criptografar
+    user.password = newPassword; // O hook "beforeUpdate" no modelo irá criptografar
     await user.save();
     res.json({ message: "Senha alterada com sucesso!" });
   } catch (error) {
     console.error("Erro ao alterar senha:", error);
     if (error.name === "SequelizeValidationError") {
-      return res.status(400).json({ message: error.errors.map(e => e.message).join(', ') });
+      return res.status(400).json({ message: error.errors.map(e => e.message).join(", ") });
     }
     res.status(500).json({ message: "Erro interno no servidor." });
   }
@@ -288,3 +288,4 @@ router.post("/settings", isAuthenticated, async (req, res) => {
 });
 
 module.exports = router;
+
