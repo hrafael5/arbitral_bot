@@ -7,10 +7,10 @@ git push
 
 echo.
 echo ==========================================================
-echo [2/4] Conectando na VPS e atualizando o projeto remoto...
+echo [2/4] Conectando na VPS e executando os mesmos comandos...
 
 ssh root@82.29.59.139 ^
-"su - arbflash -c \"cd arbitral_bot && git pull && npm install && /home/arbflash/.nvm/versions/node/v18.17.1/bin/pm2 restart arbflash-bot\""
+"su - arbflash -l -c 'cd arbitral_bot && git pull && npm install && pm2 restart arbflash-bot'"
 
 echo.
 echo ==========================================================
