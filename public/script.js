@@ -301,13 +301,13 @@ function toggleBlockedOps() {
   const text = elements.toggleBlockedOps?.querySelector('span');
   const blockedTableContainer = document.getElementById('blocked-ops-table-container');
   if (state.showBlockedOps) {
-    elements.eyeIcon.style.display = 'block';
-    elements.eyeOffIcon.style.display = 'none';
+    elements.eyeIcon.style.display = 'none';
+    elements.eyeOffIcon.style.display = 'block';
     text.textContent = 'Esconder Oportunidades Bloqueadas';
     blockedTableContainer.style.display = '';
   } else {
-    elements.eyeIcon.style.display = 'none';
-    elements.eyeOffIcon.style.display = 'block';
+    elements.eyeIcon.style.display = 'block';
+    elements.eyeOffIcon.style.display = 'none';
     text.textContent = 'Mostrar Oportunidades Bloqueadas';
     blockedTableContainer.style.display = 'none';
   }

@@ -265,6 +265,13 @@ wss.on("connection", async (wsClient) => {
         if (user) {
             wsClient.subscriptionStatus = user.subscriptionStatus;
             logger.info(`User ${wsClient.userId} subscription status: ${wsClient.subscriptionStatus}`);
+            
+            // Ativação automática de estratégias premium
+            if (user.subscriptionStatus === 'premium') {
+                config.arbitrage.enable_futures_vs_futures = true;
+                config.arbitrage.enable_spot_vs_spot = true;
+                logger.info(`Premium strategies automatically enabled for user ${wsClient.userId}`);
+            }
         } else {
             logger.warn(`User ${wsClient.userId} not found in database.`);
             wsClient.subscriptionStatus = 'free';
