@@ -7,7 +7,7 @@ git push
 
 echo.
 echo ==========================================================
-echo [2/4] Conectando na VPS e executando comandos interativos...
+echo [2/4] Conectando na VPS e executando comandos como no terminal manual...
 
 ssh root@82.29.59.139 ^
 "bash -c 'su - arbflash <<EOF
@@ -15,6 +15,7 @@ cd arbitral_bot
 git pull
 npm install
 pm2 restart arbflash-bot
+read -p \"[REMOTE] Pressione ENTER para encerrar a sessão...\"
 EOF'"
 
 echo.
