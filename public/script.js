@@ -1320,7 +1320,7 @@ function connectWebSocket() {
                 state.arbitrageOpportunities[existingIndex].data = opportunityData;
                 state.arbitrageOpportunities[existingIndex].lastUpdated = now;
             } else {
-                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: now, lastUpdated: now });
+                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: opportunityData.timestamp, lastUpdated: now });
             }
             UINeedsUpdate = true;
 
@@ -1335,9 +1335,9 @@ function connectWebSocket() {
                 const existingOp = oldOpsMap.get(key);
 
                 if (existingOp) {
-                    return { data: newOpData, firstSeen: existingOp.firstSeen, lastUpdated: now };
+                    return { data: newOpData, firstSeen: existingOp.firstSeen || newOpData.timestamp, lastUpdated: now };
                 } else {
-                    return { data: newOpData, firstSeen: now, lastUpdated: now };
+                    return { data: newOpData, firstSeen: newOpData.timestamp, lastUpdated: now };
                 }
             });
 
