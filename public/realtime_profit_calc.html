@@ -1,186 +1,182 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Detalhes da Entrada</title>
-    <style>
-        body { 
-            font-family: 'Segoe UI', 'Roboto', sans-serif; 
-            margin: 0; 
-            background-color: #161b22; 
-            color: #c9d1d9; 
-            font-size: 14px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            box-sizing: border-box;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            overflow: hidden; 
-        }
-        .popup-container { 
-            background-color: #0d1117; 
-            padding: 15px; 
-            border-radius: 8px; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
-            width: 100%; 
-            max-width: 380px;
-            height: auto;
-            box-sizing: border-box; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center;
-            border: 1px solid #30363d;
-        }
-        .pair-header {
-            font-size: 22px; 
-            font-weight: 500;
-            margin-bottom: 2px;
-            color: #adb5bd;
-            text-align: center;
-        }
-        .entry-label {
-            font-size: 10px;
-            color: #8b949e; 
-            margin-bottom: 10px; 
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .data-row {
-            display: flex;
-            justify-content: space-around; 
-            align-items: flex-start; 
-            width: 100%;
-            margin-bottom: 12px; 
-            padding: 0 5px; 
-            box-sizing: border-box;
-            gap: 5px; 
-        }
-        .data-column {
-            text-align: center;
-            flex: 1 1 0; 
-            min-width: 70px;
-        }
-        .data-column.center {
-            border-left: 1px solid #30363d;
-            border-right: 1px solid #30363d;
-            padding: 0 8px; 
-            margin: 0 3px; 
-            flex: 1.5 1 0;
-        }
-        .data-column .label {
-            font-size: 9px; 
-            color: #8b949e;
-            margin-bottom: 2px;
-            display: block;
-            text-transform: uppercase;
-            white-space: nowrap; 
-        }
-        .data-column .value {
-            font-size: 16px;
-            font-weight: 500;
-            font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
-            word-break: break-all; 
-        }
-        .data-column.center .value#popupProfitE {
-            font-size: 22px;
-            font-weight: 600;
-        }
-        .profit-value.positive { color: #3fb950; } 
-        .profit-value.negative { color: #f85149; } 
-        .profit-value.zero { color: #8b949e; }
-        .sub-profit-container {
-            margin-top: 2px; 
-        }
-        .sub-profit-container .label-s {
-            font-size: 8px; 
-            color: #8b949e;
-            text-transform: none; 
-            display: block;
-        }
-        .sub-profit-container .value-s {
-            font-size: 12px; 
-            font-weight: 500;
-             font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
-        }
-        .actions-footer {
-            display: flex;
-            justify-content: center; 
-            align-items: center;
-            width: 100%;
-            margin-top: 5px; 
-            padding-top: 10px; 
-            border-top: 1px solid #30363d;
-        }
-        #openChartButton { 
-            padding: 6px 12px;
-            font-size: 12px;
-            cursor: pointer;
-            background-color: #238636; 
-            color: white;
-            border: 1px solid #2ea043;
-            border-radius: 6px;
-            transition: background-color 0.2s;
-            font-weight: 500;
-        }
-        #openChartButton:hover {
-            background-color: #2ea043; 
-        }
-        .status {
-            position: absolute;
-            bottom: 5px;
-            right: 10px;
-            font-size: 0.8em;
-            color: #666;
-        }
-        .status-dot {
-            height: 8px;
-            width: 8px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 5px;
-        }
-        .connected { background-color: #26a69a; }
-        .disconnected { background-color: #ef5350; }
-    </style>
-</head>
-<body>
-    <div class="popup-container">
-        <div class="pair-header">
-            <span id="popupPairDisplay">CARREGANDO</span>
-        </div>
-        <div class="entry-label">Entrada</div>
-        
-        <div class="data-row">
-            <div class="data-column">
-                <span class="label"><span id="popupLeg1Exchange">--</span> (<span id="popupLeg1Instrument">--</span>)</span>
-                <span class="value" id="popupLeg1Price">...</span>
-            </div>
-            <div class="data-column center">
-                <span class="label">Lucro E</span>
-                <span class="value profit-value zero" id="popupProfitE">...</span>
-                <div class="sub-profit-container">
-                    <span class="label-s">Lucro S (Inverso):</span>
-                    <span class="value-s profit-value zero" id="popupProfitS">...</span>
-                </div>
-            </div>
-            <div class="data-column">
-                <span class="label"><span id="popupLeg2Exchange">--</span> (<span id="popupLeg2Instrument">--</span>)</span>
-                <span class="value" id="popupLeg2Price">...</span>
-            </div>
-        </div>
+// --- ESTADO E SELETORES GLOBAIS ---
+const state = {
+    params: {},
+    allPairsData: [],
+    config: null,
+    connected: false,
+};
 
-        <div class="actions-footer">
-            <button id="openChartButton">Abrir Gráficos</button>
-        </div>
-    </div>
+const elements = {
+    pairDisplay: document.getElementById('popupPairDisplay'),
+    leg1Exchange: document.getElementById('popupLeg1Exchange'),
+    leg1Instrument: document.getElementById('popupLeg1Instrument'),
+    leg1Price: document.getElementById('popupLeg1Price'),
+    profitE: document.getElementById('popupProfitE'),
+    profitS: document.getElementById('popupProfitS'),
+    leg2Exchange: document.getElementById('popupLeg2Exchange'),
+    leg2Instrument: document.getElementById('popupLeg2Instrument'),
+    leg2Price: document.getElementById('popupLeg2Price'),
+    openChartButton: document.getElementById('openChartButton'),
+    connectionDot: document.getElementById('connection-dot'),
+    connectionText: document.getElementById('connection-text'),
+};
+
+// --- FUNÇÕES DE ATUALIZAÇÃO E FORMATAÇÃO ---
+
+function formatPrice(price) {
+    if (typeof price !== 'number' || isNaN(price)) return '...';
+    const decimals = Math.abs(price) >= 1 ? 4 : 7;
+    return price.toPrecision(decimals);
+}
+
+function updateElementText(element, text) {
+    if (element && element.textContent !== text) {
+        element.textContent = text;
+    }
+}
+
+function updateProfitDisplay(element, profit) {
+    if (!element) return;
+    let text = '...';
+    let className = 'profit-value zero';
+    if (typeof profit === 'number' && !isNaN(profit)) {
+        text = (profit >= 0 ? '+' : '') + profit.toFixed(2) + '%';
+        if (profit > 0.009) className = 'profit-value positive';
+        else if (profit < -0.009) className = 'profit-value negative';
+    }
+    updateElementText(element, text);
+    const baseClass = element.id.includes('popupProfitS') ? 'value-s' : 'value';
+    element.className = `${baseClass} ${className}`;
+}
+
+// --- FUNÇÕES DE CÁLCULO ---
+
+function getFee(exchange, instrument) {
+    if (!state.config || !state.config.exchanges) return 0;
+    const exConf = state.config.exchanges[exchange.toLowerCase()];
+    if (!exConf) return 0;
+    return instrument.toUpperCase().includes('SPOT') ? (exConf.spotMakerFee || 0) : (exConf.futuresMakerFee || 0);
+}
+
+function calculateAndDisplay() {
+    if (!state.params.pair || !state.config || !state.allPairsData.length) return;
+
+    const { pair, buyEx, sellEx, buyInst, sellInst } = state.params;
     
-    <div class="status">
-        <span id="connection-dot" class="status-dot disconnected"></span>
-        <span id="connection-text"></span>
-    </div>
+    const marketBuyData = state.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === buyEx.toLowerCase());
+    const marketSellData = state.allPairsData.find(p => p.pair === pair && p.exchange.toLowerCase() === sellEx.toLowerCase());
 
-    <script src="realtime_profit_calc.js"></script>
-</body>
-</html>
+    if (!marketBuyData || !marketSellData) return;
+
+    // Calcula Lucro de Entrada (E)
+    const entryPriceBuy = buyInst.toUpperCase().includes('SPOT') ? marketBuyData.spotPrice : marketBuyData.futuresPrice;
+    const entryPriceSell = sellInst.toUpperCase().includes('SPOT') ? marketSellData.spotBid : marketSellData.futuresBid;
+    
+    updateElementText(elements.leg1Price, formatPrice(entryPriceBuy));
+    updateElementText(elements.leg2Price, formatPrice(entryPriceSell));
+    
+    if (entryPriceBuy > 0 && entryPriceSell > 0) {
+        const feeBuy = getFee(buyEx, buyInst);
+        const feeSell = getFee(sellEx, sellInst);
+        const profitE = ((entryPriceSell / entryPriceBuy) - 1 - feeBuy - feeSell) * 100;
+        updateProfitDisplay(elements.profitE, profitE);
+    }
+
+    // Calcula Lucro de Saída (S - Inverso)
+    const exitPriceBuy = sellInst.toUpperCase().includes('SPOT') ? marketSellData.spotPrice : marketSellData.futuresPrice;
+    const exitPriceSell = buyInst.toUpperCase().includes('SPOT') ? marketBuyData.spotBid : marketBuyData.futuresBid;
+    
+    if (exitPriceBuy > 0 && exitPriceSell > 0) {
+        const feeExitBuy = getFee(sellEx, sellInst);
+        const feeExitSell = getFee(buyEx, buyInst);
+        const profitS = ((exitPriceSell / exitPriceBuy) - 1 - feeExitBuy - feeExitSell) * 100;
+        updateProfitDisplay(elements.profitS, profitS);
+    }
+}
+
+// --- LÓGICA DE CONEXÃO E INICIALIZAÇÃO ---
+
+function updateConnectionStatus(connected) {
+    state.connected = connected;
+    elements.connectionDot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
+    updateElementText(elements.connectionText, connected ? 'Conectado' : 'Desconectado');
+}
+
+function connectWebSocket() {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => updateConnectionStatus(true);
+    ws.onclose = () => {
+        updateConnectionStatus(false);
+        setTimeout(connectWebSocket, 5000);
+    };
+    ws.onerror = (err) => {
+        console.error("WebSocket Error:", err);
+        updateConnectionStatus(false);
+        ws.close();
+    };
+    ws.onmessage = (event) => {
+        try {
+            const message = JSON.parse(event.data);
+            if (message.type === "all_pairs_update") {
+                state.allPairsData = message.data || [];
+                calculateAndDisplay();
+            }
+        } catch (error) {
+            console.error("Erro ao processar mensagem:", error);
+        }
+    };
+}
+
+async function initialize() {
+    const params = new URLSearchParams(window.location.search);
+    const direction = params.get("direction") || "";
+    const instruments = direction ? direction.split('->').map(s => s.trim()) : ["", ""];
+
+    // --- CORREÇÃO PRINCIPAL AQUI ---
+    // Deduz 'buyInst' e 'sellInst' a partir do parâmetro 'direction'
+    state.params = {
+        pair: params.get("pair"),
+        buyEx: params.get("buyEx"),
+        sellEx: params.get("sellEx"),
+        direction: direction,
+        buyInst: instruments[0], // Derivado da direção
+        sellInst: instruments[1]  // Derivado da direção
+    };
+
+    if (!state.params.pair || !state.params.buyInst || !state.params.sellInst) {
+        document.body.innerHTML = "<h1>Erro: Parâmetros insuficientes na URL.</h1>";
+        return;
+    }
+
+    document.title = `Detalhes: ${state.params.pair}`;
+    updateElementText(elements.pairDisplay, state.params.pair.split('/')[0]);
+    updateElementText(elements.leg1Exchange, state.params.buyEx);
+    updateElementText(elements.leg1Instrument, state.params.buyInst.toUpperCase().includes('SPOT') ? 'S' : 'F');
+    updateElementText(elements.leg2Exchange, state.params.sellEx);
+    updateElementText(elements.leg2Instrument, state.params.sellInst.toUpperCase().includes('SPOT') ? 'S' : 'F');
+
+    elements.openChartButton.addEventListener("click", () => {
+        if (window.opener && typeof window.opener.abrirGraficosComLayout === "function") {
+            window.opener.abrirGraficosComLayout(
+                state.params.buyEx, state.params.buyInst,
+                state.params.sellEx, state.params.sellInst,
+                state.params.pair, "entry", ""
+            );
+        }
+    });
+
+    try {
+        const response = await fetch('/api/config');
+        if (!response.ok) throw new Error('Falha ao buscar config');
+        state.config = await response.json();
+        connectWebSocket();
+    } catch (error) {
+        console.error("Erro na inicialização:", error);
+        updateElementText(elements.pairDisplay, "ERRO");
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initialize);
