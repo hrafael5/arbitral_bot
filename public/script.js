@@ -49,7 +49,7 @@ const state = {
   soundPlayedForVisibleOps: new Set(),
   isWatchedPairsExpanded: false,
   isMonitorParesExpanded: false,
-  isBlockedOpsExpanded: false, // <-- Alteração da revisão anterior
+  isBlockedOpsExpanded: false,
   sidebarCollapsed: false,
   currentView: 'arbitragens',
   showBlockedOps: false,
@@ -706,15 +706,26 @@ function formatRatioAsProfitPercentage(ratioDecimal) {
   return (percentageValue >= 0 ? '+' : '') + percentageValue.toFixed(4) + '%';
 }
 
+// <-- ALTERAÇÃO AQUI: Função de tempo agora mostra minutos e segundos.
 function formatTimeAgo(timestamp) {
-  if (!timestamp) return "N/A";
-  const diff = Date.now() - timestamp;
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
+    if (!timestamp) return "N/A";
+    const diff = Date.now() - timestamp;
+    const totalSeconds = Math.floor(diff / 1000);
+
+    if (totalSeconds < 60) {
+        return `${totalSeconds}s`;
+    }
+
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+
+    if (totalMinutes < 60) {
+        return `${totalMinutes}m ${remainingSeconds}s`;
+    }
+
+    const hours = Math.floor(totalMinutes / 60);
+    const remainingMinutes = totalMinutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
 }
 
 function getCurrencyIcon(pair) {
@@ -903,7 +914,7 @@ function renderWatchedPairsTable() {
                     fundingRateClass = (op.fundingRate || 0) >= 0 ? 'profit-positive' : 'profit-negative';
                 }
 
-                const timeAgo = formatTimeAgo(opWrapper.firstSeen); // <-- ALTERAÇÃO AQUI: usar opWrapper.firstSeen
+                const timeAgo = formatTimeAgo(opWrapper.firstSeen);
 
                 tableHtml += `
                     <tr>
@@ -1207,7 +1218,6 @@ function toggleMonitorPares() {
   }
 }
 
-// <-- Alteração da revisão anterior: Nova função de toggle para bloqueados
 function toggleBlockedOpsSection() {
   state.isBlockedOpsExpanded = !state.isBlockedOpsExpanded;
   if (blockedOpsTableContainerEl && blockedOpsToggleIconEl) {
@@ -1233,7 +1243,6 @@ function setupLogoutButton() {
     }
 }
 
-// <-- ALTERAÇÃO AQUI: Nova função para limpar oportunidades antigas
 function cleanupStaleOpportunities() {
     const now = Date.now();
     const originalCount = state.arbitrageOpportunities.length;
@@ -1242,7 +1251,6 @@ function cleanupStaleOpportunities() {
         return (now - opWrapper.lastUpdated) < OPPORTUNITY_TTL_MS;
     });
 
-    // Se alguma oportunidade foi removida, força a atualização da UI
     if (originalCount > state.arbitrageOpportunities.length) {
         requestUiUpdate();
     }
@@ -1288,26 +1296,38 @@ function connectWebSocket() {
         const message = JSON.parse(event.data);
         state.lastUpdated = new Date();
         let UINeedsUpdate = false;
-        
+        const now = Date.now();
+
         if (message.type === "opportunity") {
             const opportunityData = message.data;
-            const now = Date.now();
             const existingIndex = state.arbitrageOpportunities.findIndex(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
             
             if (existingIndex > -1) {
-                // <-- ALTERAÇÃO AQUI: Atualiza os dados e o tempo da última visualização
                 state.arbitrageOpportunities[existingIndex].data = opportunityData;
                 state.arbitrageOpportunities[existingIndex].lastUpdated = now;
             } else {
-                // <-- ALTERAÇÃO AQUI: Adiciona nova oportunidade com firstSeen e lastUpdated
                 state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: now, lastUpdated: now });
             }
             UINeedsUpdate = true;
 
         } else if (message.type === "opportunities") {
-            const now = Date.now();
-            // <-- ALTERAÇÃO AQUI: Garante que o batch inicial também tenha os timestamps
-            state.arbitrageOpportunities = (message.data || []).map(d => ({data:d, firstSeen: now, lastUpdated: now}));
+            const oldOpsMap = new Map(state.arbitrageOpportunities.map(opW => [
+                `${opW.data.pair}-${opW.data.direction}`,
+                opW
+            ]));
+
+            const newOpportunities = (message.data || []).map(newOpData => {
+                const key = `${newOpData.pair}-${newOpData.direction}`;
+                const existingOp = oldOpsMap.get(key);
+
+                if (existingOp) {
+                    return { data: newOpData, firstSeen: existingOp.firstSeen, lastUpdated: now };
+                } else {
+                    return { data: newOpData, firstSeen: now, lastUpdated: now };
+                }
+            });
+
+            state.arbitrageOpportunities = newOpportunities;
             UINeedsUpdate = true;
 
         } else if (message.type === "all_pairs_update") {
@@ -1333,21 +1353,6 @@ function connectWebSocket() {
       requestUiUpdate();
       setTimeout(connectWebSocket, 5000);
   };
-}
-
-function fetchConfigAndUpdateUI() {
-  fetch(`${window.location.origin}/api/config`)
-    .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP error ${res.status}`)))
-    .then(configData => {
-      Object.assign(state.config.exchanges.mexc, configData.exchanges?.mexc);
-      Object.assign(state.config.exchanges.gateio, configData.exchanges?.gateio);
-      Object.assign(state.config.arbitrage, configData.arbitrage);
-      state.config.monitoredPairs = configData.monitoredPairs || [];
-      if (filterEnableFutFutEl) filterEnableFutFutEl.checked = state.config.arbitrage.enableFuturesVsFutures;
-      if (filterEnableSpotSpotEl) filterEnableSpotSpotEl.checked = state.config.arbitrage.enableSpotVsSpot;
-      requestUiUpdate();
-    })
-    .catch(err => console.error("FRONTEND: Erro config API:", err));
 }
 
 function setupEventListeners() {
@@ -1390,7 +1395,7 @@ function setupEventListeners() {
 
   if (watchedPairsHeaderEl) watchedPairsHeaderEl.addEventListener('click', toggleWatchedPairs);
   if (monitorParesHeaderEl) monitorParesHeaderEl.addEventListener('click', toggleMonitorPares);
-  if (blockedOpsHeaderEl) blockedOpsHeaderEl.addEventListener('click', toggleBlockedOpsSection); // <-- Alteração da revisão anterior
+  if (blockedOpsHeaderEl) blockedOpsHeaderEl.addEventListener('click', toggleBlockedOpsSection);
 
   if (defaultCapitalInputEl) {
       defaultCapitalInputEl.addEventListener('input', () => {
@@ -1511,13 +1516,11 @@ function init() {
   updateAllUI();
   connectWebSocket();
 
-  // <-- ALTERAÇÃO AQUI: Inicia o processo de limpeza de oportunidades antigas
-  setInterval(cleanupStaleOpportunities, OPPORTUNITY_TTL_MS / 2); // Roda a cada 5 segundos
+  setInterval(cleanupStaleOpportunities, OPPORTUNITY_TTL_MS / 2);
 }
 
 document.addEventListener('DOMContentLoaded', init);
 
-// Funções expostas globalmente, se necessário
 window.toggleFavorite = toggleFavorite;
 window.toggleBlock = toggleBlock;
 window.unblockOpportunity = unblockOpportunity;
@@ -1527,7 +1530,6 @@ window.abrirGraficosComLayout = abrirGraficosComLayout;
 window.abrirCalculadora = abrirCalculadora;
 window.removeWatchedPair = removeWatchedPair;
 
-// Funções Freemium
 function renderUpgradeMessage() {
     const footerInfo = document.getElementById("footer-info");
     const testVersionBanner = document.getElementById("test-version-banner");
@@ -1602,7 +1604,6 @@ function applyFreemiumRestrictions() {
         const targetElement = feature.parentSelector ? feature.element.closest(feature.parentSelector) : feature.element;
         const labelElement = feature.isInput ? targetElement.querySelector("label") : feature.element;
 
-        // Limpa listeners antigos para evitar duplicação
         const newElement = feature.element.cloneNode(true);
         feature.element.parentNode.replaceChild(newElement, feature.element);
         feature.element = newElement;
