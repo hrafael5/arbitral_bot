@@ -7,19 +7,20 @@ git push
 
 echo.
 echo ==========================================================
-echo [2/4] Conectando na VPS e executando comandos como no terminal manual...
+echo [2/4] Conectando na VPS e executando comandos como no terminal...
 
-ssh root@82.29.59.139 ^
-"bash -c 'su - arbflash <<EOF
+ssh -tt root@82.29.59.139 ^
+"su - arbflash -l <<EOF
 cd arbitral_bot
 git pull
 npm install
 pm2 restart arbflash-bot
-read -p \"[REMOTE] Pressione ENTER para encerrar a sessão...\"
-EOF'"
+echo '--- Deploy remoto finalizado ---'
+read -p 'Pressione ENTER para sair...'
+EOF"
 
 echo.
 echo ==========================================================
-echo [3/4] Deploy remoto concluído!
-echo [4/4] Tudo pronto. O bot foi atualizado com sucesso.
+echo [3/4] Sessão remota encerrada.
 pause
+
