@@ -15,8 +15,8 @@ const state = {
     },
     arbitrage: {
         minProfitPercentage: 0.1,
-        enableFuturesVsFutures: false,
-        enableSpotVsSpot: false
+        enableFuturesVsFutures: true,
+        enableSpotVsSpot: true
     },
     monitoredPairs: []
   },
@@ -1799,4 +1799,53 @@ if (document.readyState === 'loading') {
 } else {
     setupEventListeners();
 }
+
+
+
+filterMinProfitEDisplayEl.addEventListener("change", (event) => {
+    state.filters.minProfitEFilterDisplay = parseFloat(event.target.value);
+    requestUiUpdate();
+});
+
+filterMinProfitSDisplayEl.addEventListener("change", (event) => {
+    state.filters.minProfitSFilterDisplay = parseFloat(event.target.value);
+    requestUiUpdate();
+});
+
+
+
+
+
+elements.sidebarToggle.addEventListener("click", toggleSidebar);
+watchedPairsHeaderEl.addEventListener("click", toggleWatchedPairs);
+monitorParesHeaderEl.addEventListener("click", toggleMonitorPares);
+
+function toggleWatchedPairs() {
+    state.isWatchedPairsExpanded = !state.isWatchedPairsExpanded;
+    watchedPairsTableContainerEl.style.display = state.isWatchedPairsExpanded ? '' : 'none';
+    watchedPairsToggleIconEl.innerHTML = state.isWatchedPairsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+    localStorage.setItem(WATCHED_PAIRS_EXPANDED_KEY, state.isWatchedPairsExpanded);
+}
+
+function toggleMonitorPares() {
+    state.isMonitorParesExpanded = !state.isMonitorParesExpanded;
+    monitorParesTableContainerEl.style.display = state.isMonitorParesExpanded ? '' : 'none';
+    monitorParesToggleIconEl.innerHTML = state.isMonitorParesExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+    localStorage.setItem(MONITOR_PARES_EXPANDED_KEY, state.isMonitorParesExpanded);
+}
+
+// Inicializar estado dos painéis ao carregar
+function initializePanelStates() {
+    state.isWatchedPairsExpanded = localStorage.getItem(WATCHED_PAIRS_EXPANDED_KEY) === 'true';
+    watchedPairsTableContainerEl.style.display = state.isWatchedPairsExpanded ? '' : 'none';
+    watchedPairsToggleIconEl.innerHTML = state.isWatchedPairsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+
+    state.isMonitorParesExpanded = localStorage.getItem(MONITOR_PARES_EXPANDED_KEY) === 'true';
+    monitorParesTableContainerEl.style.display = state.isMonitorParesExpanded ? '' : 'none';
+    monitorParesToggleIconEl.innerHTML = state.isMonitorParesExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+}
+
+// Chamar a função de inicialização quando o DOM estiver carregado
+document.addEventListener('DOMContentLoaded', initializePanelStates);
+
 
