@@ -1,14 +1,19 @@
 @echo off
-echo Enviando atualizações para o GitHub...
+echo ==========================================================
+echo [1/4] Enviando atualizações para o GitHub...
 git add .
 git commit -m "Deploy automático"
 git push
 
-echo Conectando na VPS e atualizando o projeto remoto...
+echo.
+echo ==========================================================
+echo [2/4] Conectando na VPS e atualizando o projeto remoto...
 
 ssh root@82.29.59.139 ^
 "su - arbflash -c \"cd arbitral_bot && git pull && npm install && pm2 restart arbflash-bot\""
 
-echo ---
-echo Deploy finalizado com sucesso!
+echo.
+echo ==========================================================
+echo [3/4] Deploy remoto concluído!
+echo [4/4] Tudo pronto. O bot foi atualizado com sucesso.
 pause
