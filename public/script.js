@@ -580,11 +580,7 @@ async function loadWatchedPairs() {
     const response = await fetch('/api/users/settings');
     if (response.ok) {
         const settings = await response.json();
-        state.watchedPairsList = settings.watchedPairs || [];
-        if (watchedPairsCountEl) {
-            watchedPairsCountEl.textContent = state.watchedPairsList.length;
-        }
-        requestUiUpdate();
+                    state.watchedPairsList = settings.watchedPairs || [];
     } else {
         console.error("Não foi possível carregar os pares vigiados do servidor.");
         state.watchedPairsList = [];
@@ -1403,9 +1399,9 @@ function connectWebSocket() {
 
         if (UINeedsUpdate) {
             requestUiUpdate();
-            // --- ALTERAÇÃO INICIA AQUI (3/3): Chamada da nova função ---
-            broadcastToCalculators(); 
-            // --- ALTERAÇÃO TERMINA AQUI (3/3) ---
+            broadcastToCalculators(); // CHAME AQUI PARA ATUALIZAR CALCULADORAS IMEDIATAMENTE
+
+
         }
     } catch (error) {
         console.error("FRONTEND: Erro WebSocket:", error);
