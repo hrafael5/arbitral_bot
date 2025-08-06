@@ -49,16 +49,20 @@ function formatProfitPercentageForDisplay(profitPercentage, element) {
   element.className = finalClassName;
 }
 
-async function fetchLatestPrices(pair, buyEx, sellEx) {
-  // Substitua por chamada real (ex.: WebSocket ou API)
-  // Simulação temporária com dados aleatórios
-  return [Math.random() * 100, Math.random() * 100];
+function calculateProfit(buyPrice, sellPrice, buyFee, sellFee, direction) {
+  let grossSpread = 0;
+  if (direction.includes('spot/futures')) {
+    grossSpread = (sellPrice / buyPrice) - 1;
+  } else if (direction.includes('futures/spot')) {
+    grossSpread = (buyPrice / sellPrice) - 1;
+  }
+  const netSpread = (grossSpread - buyFee - sellFee) * 100;
+  return { entryProfit: netSpread, sellProfit: -netSpread };
 }
 
-function calculateProfit(buyPrice, sellPrice, buyFee, sellFee) {
-  const grossSpread = (sellPrice / buyPrice) - 1;
-  const netSpread = (grossSpread - buyFee - sellFee) * 100;
-  return { entryProfit: netSpread, sellProfit: -netSpread }; // Lucro inverso para saída
+async function fetchLatestPrices(pair, buyEx, sellEx) {
+  // Placeholder - substitua por WebSocket ou API real
+  return [initialBuyPrice || 100, initialSellPrice || 100.5]; // Valores iniciais fixos para teste
 }
 
 function updateDisplay(buyPrice, sellPrice) {
@@ -74,7 +78,7 @@ function updateDisplay(buyPrice, sellPrice) {
   const buyFee = entryBuyInstrumentIsSpot ? buyExConfig.spotMakerFee : buyExConfig.futuresMakerFee;
   const sellFee = entrySellInstrumentIsSpot ? sellExConfig.spotMakerFee : sellExConfig.futuresMakerFee;
 
-  const { entryProfit, sellProfit } = calculateProfit(buyPrice, sellPrice, buyFee, sellFee);
+  const { entryProfit, sellProfit } = calculateProfit(buyPrice, sellPrice, buyFee, sellFee, originalDirection);
   formatProfitPercentageForDisplay(entryProfit, popupProfitEEl);
   formatProfitPercentageForDisplay(sellProfit, popupProfitSEl);
 }
@@ -100,12 +104,12 @@ window.onload = () => {
   popupLeg2ExchangeEl.textContent = entrySellExName;
   popupLeg2InstrumentEl.textContent = entrySellInstrumentIsSpot ? 'Spot' : 'Futures';
 
-  // Inicia WebSocket para dados em tempo real
   const ws = new WebSocket(`ws://${window.location.host}/market-updates`);
   ws.onopen = () => console.log('WebSocket connected');
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'price_update' && data.pair === pair) {
+      console.log(`[Debug] Received - buy: ${data.buyPrice}, sell: ${data.sellPrice}`);
       initialBuyPrice = data.buyPrice || initialBuyPrice;
       initialSellPrice = data.sellPrice || initialSellPrice;
       requestAnimationFrame(() => updateDisplay(initialBuyPrice, initialSellPrice));
@@ -114,7 +118,6 @@ window.onload = () => {
   ws.onerror = (error) => console.error('WebSocket error:', error);
   ws.onclose = () => console.log('WebSocket closed, attempting reconnect...');
 
-  // Atualização periódica otimizada
   window.profitUpdateInterval = setInterval(() => {
     if (Date.now() - lastUpdateTime >= 250) {
       requestAnimationFrame(() => {
