@@ -7,6 +7,7 @@ let entrySellInstrumentIsSpot = false;
 let initialBuyPrice = 0;
 let initialSellPrice = 0;
 let lastUpdateTime = 0;
+let ws = null;
 
 const popupPairDisplayEl = document.getElementById('popupPairDisplay');
 const popupLeg1ExchangeEl = document.getElementById('popupLeg1Exchange');
@@ -51,21 +52,28 @@ function formatProfitPercentageForDisplay(profitPercentage, element) {
 
 function calculateProfit(buyPrice, sellPrice, buyFee, sellFee, direction) {
   let grossSpread = 0;
+  if (!buyPrice || !sellPrice) return { entryProfit: 0, sellProfit: 0 };
   if (direction.includes('spot/futures')) {
-    grossSpread = (sellPrice / buyPrice) - 1;
+    grossSpread = (sellPrice / buyPrice) - 1; // Spot para Futures
   } else if (direction.includes('futures/spot')) {
-    grossSpread = (buyPrice / sellPrice) - 1;
+    grossSpread = (buyPrice / sellPrice) - 1; // Futures para Spot
+  } else {
+    console.warn(`[Calc] Direção inválida: ${direction}, usando spot/futures como padrão`);
+    grossSpread = (sellPrice / buyPrice) - 1;
   }
   const netSpread = (grossSpread - buyFee - sellFee) * 100;
   return { entryProfit: netSpread, sellProfit: -netSpread };
 }
 
-async function fetchLatestPrices(pair, buyEx, sellEx) {
-  // Placeholder - substitua por WebSocket ou API real
-  return [initialBuyPrice || 100, initialSellPrice || 100.5]; // Valores iniciais fixos para teste
-}
-
 function updateDisplay(buyPrice, sellPrice) {
+  if (!buyPrice || !sellPrice) {
+    popupLeg1PriceEl.textContent = '-';
+    popupLeg2PriceEl.textContent = '-';
+    formatProfitPercentageForDisplay(0, popupProfitEEl);
+    formatProfitPercentageForDisplay(0, popupProfitSEl);
+    return;
+  }
+
   popupLeg1PriceEl.textContent = formatPriceForDisplay(buyPrice);
   popupLeg2PriceEl.textContent = formatPriceForDisplay(sellPrice);
 
@@ -81,12 +89,13 @@ function updateDisplay(buyPrice, sellPrice) {
   const { entryProfit, sellProfit } = calculateProfit(buyPrice, sellPrice, buyFee, sellFee, originalDirection);
   formatProfitPercentageForDisplay(entryProfit, popupProfitEEl);
   formatProfitPercentageForDisplay(sellProfit, popupProfitSEl);
+  console.log(`[Debug] Calculated - buy: ${buyPrice}, sell: ${sellPrice}, entryProfit: ${entryProfit}%, sellProfit: ${sellProfit}%`);
 }
 
 window.onload = () => {
   const params = new URLSearchParams(window.location.search);
   pair = params.get('pair') || '';
-  originalDirection = params.get('direction') || '';
+  originalDirection = params.get('direction') || 'spot/futures'; // Padrão para evitar undefined
   entryBuyExName = params.get('buyEx') || 'mexc';
   entrySellExName = params.get('sellEx') || 'mexc';
 
@@ -104,8 +113,11 @@ window.onload = () => {
   popupLeg2ExchangeEl.textContent = entrySellExName;
   popupLeg2InstrumentEl.textContent = entrySellInstrumentIsSpot ? 'Spot' : 'Futures';
 
-  const ws = new WebSocket(`ws://${window.location.host}/market-updates`);
-  ws.onopen = () => console.log('WebSocket connected');
+  ws = new WebSocket(`ws://${window.location.host}/market-updates`);
+  ws.onopen = () => {
+    console.log('WebSocket connected');
+    ws.send(JSON.stringify({ type: 'subscribe', pair: pair })); // Solicita inscrição no par
+  };
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'price_update' && data.pair === pair) {
@@ -116,19 +128,23 @@ window.onload = () => {
     }
   };
   ws.onerror = (error) => console.error('WebSocket error:', error);
-  ws.onclose = () => console.log('WebSocket closed, attempting reconnect...');
+  ws.onclose = () => {
+    console.log('WebSocket closed, attempting reconnect...');
+    setTimeout(() => {
+      ws = new WebSocket(`ws://${window.location.host}/market-updates`);
+    }, 1000);
+  };
 
   window.profitUpdateInterval = setInterval(() => {
     if (Date.now() - lastUpdateTime >= 250) {
       requestAnimationFrame(() => {
-        fetchLatestPrices(pair, entryBuyExName, entrySellExName).then(([buyPrice, sellPrice]) => {
-          if (buyPrice && sellPrice) {
-            initialBuyPrice = buyPrice;
-            initialSellPrice = sellPrice;
-            updateDisplay(buyPrice, sellPrice);
-            lastUpdateTime = Date.now();
-          }
-        }).catch(e => console.error('[CalcPopUpNew] Error fetching prices:', e));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'request_update', pair: pair })); // Solicita atualização
+        } else {
+          console.warn('[Calc] WebSocket not open, using last known prices');
+          updateDisplay(initialBuyPrice, initialSellPrice);
+        }
+        lastUpdateTime = Date.now();
       });
     }
   }, 250);
