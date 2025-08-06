@@ -6,6 +6,7 @@ let entryBuyInstrumentIsSpot = true;
 let entrySellInstrumentIsSpot = false;
 let initialBuyPrice = 0;
 let initialSellPrice = 0;
+let lastUpdateTime = 0;
 
 const popupPairDisplayEl = document.getElementById('popupPairDisplay');
 const popupLeg1ExchangeEl = document.getElementById('popupLeg1Exchange');
@@ -16,8 +17,6 @@ const popupProfitSEl = document.getElementById('popupProfitS');
 const popupLeg2ExchangeEl = document.getElementById('popupLeg2Exchange');
 const popupLeg2InstrumentEl = document.getElementById('popupLeg2Instrument');
 const popupLeg2PriceEl = document.getElementById('popupLeg2Price');
-let lastUpdateTime = 0;
-
 const openChartButtonEl = document.getElementById('openChartButton');
 
 function formatPriceForDisplay(price, decimals = 7) {
@@ -38,12 +37,12 @@ function getRelevantDecimals(price) {
 
 function formatProfitPercentageForDisplay(profitPercentage, element) {
   if (!element) return;
-  let textToShow = "Dados...";
+  let textToShow = "Aguardando...";
   let baseClassName = element.id === 'popupProfitS' ? 'value-s profit-value' : 'value profit-value';
   let finalClassName = `${baseClassName} zero`;
 
   if (typeof profitPercentage === 'number' && !isNaN(profitPercentage)) {
-    textToShow = (profitPercentage > 0 ? "+" : "") + profitPercentage.toFixed(2) + "%";
+    textToShow = (profitPercentage >= 0 ? "+" : "") + profitPercentage.toFixed(2) + "%";
     finalClassName = `${baseClassName} ${profitPercentage > 0 ? 'positive' : profitPercentage < 0 ? 'negative' : 'zero'}`;
   }
   element.textContent = textToShow;
@@ -52,18 +51,32 @@ function formatProfitPercentageForDisplay(profitPercentage, element) {
 
 async function fetchLatestPrices(pair, buyEx, sellEx) {
   // Substitua por chamada real (ex.: WebSocket ou API)
-  return [Math.random() * 100, Math.random() * 100]; // Simulação
+  // Simulação temporária com dados aleatórios
+  return [Math.random() * 100, Math.random() * 100];
+}
+
+function calculateProfit(buyPrice, sellPrice, buyFee, sellFee) {
+  const grossSpread = (sellPrice / buyPrice) - 1;
+  const netSpread = (grossSpread - buyFee - sellFee) * 100;
+  return { entryProfit: netSpread, sellProfit: -netSpread }; // Lucro inverso para saída
 }
 
 function updateDisplay(buyPrice, sellPrice) {
   popupLeg1PriceEl.textContent = formatPriceForDisplay(buyPrice);
   popupLeg2PriceEl.textContent = formatPriceForDisplay(sellPrice);
 
-  const grossSpread = (sellPrice / buyPrice) - 1;
-  const fees = { buy: 0.0001, sell: 0.0001 }; // Exemplo de taxas
-  const netSpread = (grossSpread - fees.buy - fees.sell) * 100;
-  formatProfitPercentageForDisplay(netSpread, popupProfitEEl);
-  formatProfitPercentageForDisplay(-netSpread, popupProfitSEl); // Lucro inverso
+  const defaultFees = {
+    mexc: { spotMakerFee: 0.0000, futuresMakerFee: 0.0001 },
+    gateio: { spotMakerFee: 0.0010, futuresMakerFee: 0.0002 }
+  };
+  const buyExConfig = defaultFees[entryBuyExName.toLowerCase()] || { spotMakerFee: 0.001, futuresMakerFee: 0.001 };
+  const sellExConfig = defaultFees[entrySellExName.toLowerCase()] || { spotMakerFee: 0.001, futuresMakerFee: 0.001 };
+  const buyFee = entryBuyInstrumentIsSpot ? buyExConfig.spotMakerFee : buyExConfig.futuresMakerFee;
+  const sellFee = entrySellInstrumentIsSpot ? sellExConfig.spotMakerFee : sellExConfig.futuresMakerFee;
+
+  const { entryProfit, sellProfit } = calculateProfit(buyPrice, sellPrice, buyFee, sellFee);
+  formatProfitPercentageForDisplay(entryProfit, popupProfitEEl);
+  formatProfitPercentageForDisplay(sellProfit, popupProfitSEl);
 }
 
 window.onload = () => {
@@ -89,24 +102,32 @@ window.onload = () => {
 
   // Inicia WebSocket para dados em tempo real
   const ws = new WebSocket(`ws://${window.location.host}/market-updates`);
+  ws.onopen = () => console.log('WebSocket connected');
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'price_update' && data.pair === pair) {
-      initialBuyPrice = data.buyPrice;
-      initialSellPrice = data.sellPrice;
-      updateDisplay(data.buyPrice, data.sellPrice);
+      initialBuyPrice = data.buyPrice || initialBuyPrice;
+      initialSellPrice = data.sellPrice || initialSellPrice;
+      requestAnimationFrame(() => updateDisplay(initialBuyPrice, initialSellPrice));
     }
   };
   ws.onerror = (error) => console.error('WebSocket error:', error);
+  ws.onclose = () => console.log('WebSocket closed, attempting reconnect...');
 
   // Atualização periódica otimizada
   window.profitUpdateInterval = setInterval(() => {
-    requestAnimationFrame(() => {
-      if (Date.now() - lastUpdateTime >= 250) {
-        updateDisplay(initialBuyPrice, initialSellPrice);
-        lastUpdateTime = Date.now();
-      }
-    });
+    if (Date.now() - lastUpdateTime >= 250) {
+      requestAnimationFrame(() => {
+        fetchLatestPrices(pair, entryBuyExName, entrySellExName).then(([buyPrice, sellPrice]) => {
+          if (buyPrice && sellPrice) {
+            initialBuyPrice = buyPrice;
+            initialSellPrice = sellPrice;
+            updateDisplay(buyPrice, sellPrice);
+            lastUpdateTime = Date.now();
+          }
+        }).catch(e => console.error('[CalcPopUpNew] Error fetching prices:', e));
+      });
+    }
   }, 250);
 
   openChartButtonEl.addEventListener('click', () => {
@@ -119,8 +140,10 @@ window.onload = () => {
         pair,
         originalDirection,
         '',
-        { buyPrice: initialBuyPrice, sellPrice: initialSellPrice }
+        { buyPrice: initialBuyPrice, sellPrice: initialSellPrice, timestamp: Date.now() }
       );
+    } else {
+      console.warn("FRONTEND: window.opener ou abrirGraficosComLayout não disponível.");
     }
   });
 
