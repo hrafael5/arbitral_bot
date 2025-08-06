@@ -42,73 +42,61 @@ function getRelevantDecimals(price) {
     const absPrice = Math.abs(price);
     if (absPrice >= 100) return 2;
     if (absPrice >= 1) return 4;
-    if (absPrice >= 0.01) return 5;
-    if (absPrice >= 0.0001) return 6;
-    return 7;
+    if (absPrice >= 0.01) return 6;
+    return 8;
 }
 
 /**
- * Formata e colore um valor de lucro percentual.
- * @param {number} profitPercentage O lucro em percentagem.
- * @param {HTMLElement} element O elemento do DOM para atualizar.
+ * Formata a porcentagem de lucro para exibição com cores (verde para positivo, vermelho para negativo).
+ * @param {number} percentage A porcentagem a ser formatada.
+ * @param {HTMLElement} targetElement O elemento HTML onde a porcentagem será exibida.
  */
-function formatProfitPercentageForDisplay(profitPercentage, element) {
-    if (!element) return;
-
-    let textToShow = "Calculando...";
-    const baseClassName = element.id === 'popupProfitS' ? 'value-s profit-value' : 'value profit-value';
-    let finalClassName = `${baseClassName} zero`;
-
-    if (typeof profitPercentage === 'number' && !isNaN(profitPercentage)) {
-        textToShow = (profitPercentage >= 0 ? '+' : '') + profitPercentage.toFixed(2) + '%';
-        if (profitPercentage > 0.009) finalClassName = `${baseClassName} positive`;
-        else if (profitPercentage < -0.009) finalClassName = `${baseClassName} negative`;
+function formatProfitPercentageForDisplay(percentage, targetElement) {
+    if (typeof percentage !== 'number' || isNaN(percentage)) {
+        targetElement.textContent = '-0.00%';
+        targetElement.classList.remove('text-green-600', 'text-red-600', 'dark:text-green-400', 'dark:text-red-400');
+        return;
     }
-    
-    element.textContent = textToShow;
-    element.className = finalClassName;
+    targetElement.textContent = (percentage >= 0 ? '+' : '') + percentage.toFixed(2) + '%';
+    targetElement.classList.remove('text-green-600', 'text-red-600', 'dark:text-green-400', 'dark:text-red-400');
+    if (percentage > 0) {
+        targetElement.classList.add('text-green-600', 'dark:text-green-400');
+    } else if (percentage < 0) {
+        targetElement.classList.add('text-red-600', 'dark:text-red-400');
+    }
 }
 
 /**
- * Configura o estado inicial da calculadora com base nos parâmetros da URL.
- * @param {URLSearchParams} params Os parâmetros da URL.
+ * Função de debounce para limitar a frequência de execução de uma função.
+ * @param {Function} func A função a ser debounced.
+ * @param {number} wait O tempo de espera em milissegundos.
+ * @returns {Function} A função debounced.
  */
-function setInitialState(params) {
-    pair = params.get('pair'); 
-    originalDirection = params.get('direction'); 
-    entryBuyExName = params.get('buyEx') || 'mexc'; 
-    entrySellExName = params.get('sellEx') || 'mexc'; 
-
-    let buyInstrument = "S";
-    let sellInstrument = "F";
-
-    if (originalDirection) {
-        const dirParts = originalDirection.toLowerCase().split('/');
-        if (dirParts.length === 2) {
-            buyInstrument = dirParts[0].trim().includes("spot") ? 'S' : 'F';
-            sellInstrument = dirParts[1].trim().includes("spot") ? 'S' : 'F';
-        }
-    }
-
-    // Atualiza a UI estática que não muda
-    document.title = "Entrada: " + pair;
-    popupPairDisplayEl.textContent = pair.split('/')[0];
-    popupLeg1ExchangeEl.textContent = entryBuyExName.length > 4 ? entryBuyExName.substring(0,4).toUpperCase() : entryBuyExName.toUpperCase();
-    popupLeg1InstrumentEl.textContent = buyInstrument;
-    popupLeg2ExchangeEl.textContent = entrySellExName.length > 4 ? entrySellExName.substring(0,4).toUpperCase() : entrySellExName.toUpperCase();
-    popupLeg2InstrumentEl.textContent = sellInstrument;
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
 }
 
-// --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
+// --- INICIALIZAÇÃO E EVENTOS ---
 
-window.onload = () => {
-    // Extrai os parâmetros da URL para configurar a janela.
-    const params = new URLSearchParams(window.location.search);
-    setInitialState(params);
+// Aguarda o carregamento do DOM antes de configurar os eventos.
+document.addEventListener('DOMContentLoaded', () => {
+    // Inicializa os campos da UI com valores padrão.
+    if (popupPairDisplayEl) popupPairDisplayEl.textContent = pair || '---';
+    if (popupLeg1ExchangeEl) popupLeg1ExchangeEl.textContent = entryBuyExName.toUpperCase();
+    if (popupLeg1InstrumentEl) popupLeg1InstrumentEl.textContent = 'S';
+    if (popupLeg1PriceEl) popupLeg1PriceEl.textContent = '0.00000';
+    if (popupProfitEEl) popupProfitEEl.textContent = '-0.00%';
+    if (popupProfitSEl) popupProfitSEl.textContent = '-0.00%';
+    if (popupLeg2ExchangeEl) popupLeg2ExchangeEl.textContent = entrySellExName.toUpperCase();
+    if (popupLeg2InstrumentEl) popupLeg2InstrumentEl.textContent = 'F';
+    if (popupLeg2PriceEl) popupLeg2PriceEl.textContent = '0.00000';
 
-    // Adiciona o "escutador" de mensagens da janela principal.
-    // Esta é a parte central da comunicação em tempo real.
-    window.addEventListener('message', (event) => {
+    // Configura o ouvinte de mensagens da janela principal (enviadas por script.js).
+    window.addEventListener('message', debounce((event) => {
         // Verificação de segurança: só aceita mensagens da mesma origem.
         if (event.origin !== window.location.origin) return;
 
@@ -129,7 +117,7 @@ window.onload = () => {
                 formatProfitPercentageForDisplay(lucroS, popupProfitSEl);
             }
         }
-    });
+    }, 100)); // Debounce de 100ms
 
     // Adiciona o evento de clique ao botão para abrir os gráficos na janela principal.
     openChartButtonEl.addEventListener('click', () => {
@@ -149,4 +137,4 @@ window.onload = () => {
             );
         }
     });
-};
+});
