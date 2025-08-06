@@ -181,7 +181,7 @@ window.onload = () => {
     }
 
     updatePopupDisplay();
-    window.profitUpdateInterval = setInterval(updatePopupDisplay, 250);
+    window.profitUpdateInterval = setInterval(updatePopupDisplay, 100);
 
     openChartButtonEl.addEventListener('click', () => {
         if (window.opener && window.opener.abrirGraficosComLayout) {
