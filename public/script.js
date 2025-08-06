@@ -59,6 +59,10 @@ const state = {
 
 window.frontendState = state;
 
+// --- ALTERAÇÃO INICIA AQUI (1/3): Adicionado gerenciador de janelas de calculadora ---
+const openCalculators = new Map(); // Para gerenciar janelas abertas
+// --- ALTERAÇÃO TERMINA AQUI (1/3) ---
+
 const FAVORITES_STORAGE_KEY = 'arbitrageDashboard_favoritedOps_v1';
 const BLOCKED_STORAGE_KEY = 'arbitrageDashboard_blockedOps_v2';
 const THEME_STORAGE_KEY = 'arbitrageDashboard_theme_v1';
@@ -203,19 +207,67 @@ function abrirJanelaDeGrafico(url, windowName, position) {
     if (newWindow) newWindow.focus();
 }
 
+// --- ALTERAÇÃO INICIA AQUI (2/3): Funções de abrir e transmitir para a calculadora ---
 function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false) {
+    const windowName = `calc_${pair}_${direction}`;
+    
+    // Se a janela já existe, apenas a foca
+    if (openCalculators.has(windowName) && !openCalculators.get(windowName).closed) {
+        openCalculators.get(windowName).focus();
+        return;
+    }
+
     const url = `realtime_profit_calc.html?pair=${encodeURIComponent(pair)}&direction=${encodeURIComponent(direction)}&buyEx=${encodeURIComponent(buyEx)}&sellEx=${encodeURIComponent(sellEx)}`;
-    const windowName = forceNewWindow ? '_blank' : 'arbitrage_calculator_window';
     const popWidth = 420;
     const popHeight = 220;
     const left = (window.screen.availWidth / 2) - (popWidth / 2);
     const top = (window.screen.availHeight / 2) - (popHeight / 2);
     const features = `width=${popWidth},height=${popHeight},top=${top},left=${left},resizable=yes,scrollbars=yes`;
+    
     const calcWindow = window.open(url, windowName, features);
+    
     if (calcWindow) {
-        calcWindow.focus();
+        openCalculators.set(windowName, calcWindow);
+        // Remove da lista quando a janela for fechada
+        const closeCheckInterval = setInterval(() => {
+            if (calcWindow.closed) {
+                openCalculators.delete(windowName);
+                clearInterval(closeCheckInterval);
+            }
+        }, 1000);
     }
 }
+
+// Nova função para enviar os dados para as calculadoras
+function broadcastToCalculators() {
+    if (openCalculators.size === 0) return;
+
+    openCalculators.forEach((calcWindow, windowName) => {
+        if (calcWindow.closed) {
+            openCalculators.delete(windowName);
+            return;
+        }
+
+        const nameParts = windowName.split('_');
+        const pair = nameParts[1];
+        const direction = nameParts.slice(2).join('_');
+        
+        const relevantOp = state.arbitrageOpportunities.find(opw => opw.data.pair === pair && opw.data.direction === direction);
+
+        if (relevantOp) {
+            const lucroS = calculateLucroS(relevantOp.data, state.allPairsData, state.config);
+            const payload = {
+                type: 'update',
+                opportunity: relevantOp.data,
+                lucroS: lucroS
+            };
+            // Envia a mensagem para a janela da calculadora
+            calcWindow.postMessage(payload, window.location.origin);
+        }
+    });
+}
+// --- ALTERAÇÃO TERMINA AQUI (2/3) ---
+
 
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
     let opDataToUse = null;
@@ -782,7 +834,7 @@ function calculateLucroS(op, allMarketData, config) {
     feeForBuyExit = parseFloat(configBuyExit.spotMakerFee);
   } else {
     priceToBuyForExit = marketDataForBuyExit.futuresPrice;
-    feeForBuyExit = parseFloat(configBuyExit.futuresMakerFee);
+    feeForBuyExit = parseFloat(configBuyExit.spotMakerFee);
   }
   if (typeof priceToBuyForExit !=='number' || isNaN(priceToBuyForExit) || priceToBuyForExit <= 0 || typeof priceToSellForExit !=='number' || isNaN(priceToSellForExit) || isNaN(feeForBuyExit) || isNaN(feeForSellExit)) return null;
   const grossSpreadExitDecimal = (priceToSellForExit / priceToBuyForExit) - 1;
@@ -1349,7 +1401,12 @@ function connectWebSocket() {
             UINeedsUpdate = true;
         }
 
-        if (UINeedsUpdate) requestUiUpdate();
+        if (UINeedsUpdate) {
+            requestUiUpdate();
+            // --- ALTERAÇÃO INICIA AQUI (3/3): Chamada da nova função ---
+            broadcastToCalculators(); 
+            // --- ALTERAÇÃO TERMINA AQUI (3/3) ---
+        }
     } catch (error) {
         console.error("FRONTEND: Erro WebSocket:", error);
     }
