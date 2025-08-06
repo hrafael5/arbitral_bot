@@ -250,7 +250,8 @@ function broadcastToCalculators() {
 
         const nameParts = windowName.split('_');
         const pair = nameParts[1];
-        const direction = nameParts.slice(2).join('_');
+        // Recria a 'direction' completa, que pode conter '_'
+        const direction = nameParts.slice(2).join('_'); 
         
         const relevantOp = state.arbitrageOpportunities.find(opw => opw.data.pair === pair && opw.data.direction === direction);
 
@@ -261,7 +262,6 @@ function broadcastToCalculators() {
                 opportunity: relevantOp.data,
                 lucroS: lucroS
             };
-            // Envia a mensagem para a janela da calculadora
             calcWindow.postMessage(payload, window.location.origin);
         }
     });
