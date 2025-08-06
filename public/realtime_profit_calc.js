@@ -1,13 +1,12 @@
-// Em realtime_profit_calc.js
-
 document.addEventListener("DOMContentLoaded", () => {
     const params = new URLSearchParams(window.location.search);
     const pair = params.get("pair");
     const direction = params.get("direction");
     const buyEx = params.get("buyEx");
     const sellEx = params.get("sellEx");
-    const buyInst = params.get("buyInst"); // Adicionado para abrir gráficos
-    const sellInst = params.get("sellInst"); // Adicionado para abrir gráficos
+    // Precisamos do 'instrument' para a função de abrir gráficos funcionar
+    const buyInst = params.get("buyInst") || (direction.toLowerCase().includes('spot') ? 'spot' : 'futures');
+    const sellInst = params.get("sellInst") || (direction.toLowerCase().includes('spot') ? 'futures' : 'spot');
 
     if (!pair) {
         document.body.innerHTML = "<h1>Erro: Par não especificado.</h1>";
@@ -22,7 +21,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (openChartButtonEl) {
         openChartButtonEl.addEventListener("click", () => {
             if (window.opener && typeof window.opener.abrirGraficosComLayout === "function") {
-                // Chama a função da janela principal para abrir os gráficos
                 window.opener.abrirGraficosComLayout(buyEx, buyInst, sellEx, sellInst, pair, direction, '');
             }
         });
@@ -54,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
         formatProfit(lucroS, elements.profitS);
     }
 
-    // Funções de formatação (simplificadas)
+    // Funções de formatação
     function formatPrice(price) {
         if (typeof price !== "number" || isNaN(price)) return "...";
         const decimals = Math.abs(price) >= 1 ? 4 : 7;
@@ -72,16 +70,14 @@ document.addEventListener("DOMContentLoaded", () => {
             else if (value < -0.009) className = "negative";
         }
         
+        const baseClass = element.id === 'popupProfitS' ? 'value-s' : 'value';
         element.textContent = text;
-        element.className = `${element.id === 'popupProfitS' ? 'value-s' : 'value'} profit-value ${className}`;
+        element.className = `${baseClass} profit-value ${className}`;
     }
 
-    // O mais importante: Escutar as mensagens da janela principal
+    // Escuta as mensagens da janela principal
     window.addEventListener("message", (event) => {
-        // Verificação de segurança
-        if (event.origin !== window.location.origin) {
-            return;
-        }
+        if (event.origin !== window.location.origin) return;
 
         const { type, ...data } = event.data;
         if (type === 'update') {
