@@ -22,28 +22,43 @@ const GateConnector = require('./lib/GateConnector');
 const MarketMonitor = require('./lib/MarketMonitor');
 const ArbitrageEngine = require('./lib/ArbitrageEngine');
 const OpportunitySignaler = require('./lib/OpportunitySignaler');
+const { sendPasswordResetEmail } = require('./utils/emailService');
 
 // --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES ---
 
 const broadcastToClients = (wssInstance, data) => {
     if (!wssInstance || !wssInstance.clients) return;
+    const startTime = Date.now();
+    let broadcastCount = 0;
     wssInstance.clients.forEach(c => {
         if (c.readyState === WebSocket.OPEN && c.userId) {
-            if (data.type === 'opportunity' && c.subscriptionStatus === 'free' && data.data.netSpreadPercentage >= 1.0) {
-                return;
-            }
+            if (data.type === 'opportunity' && c.subscriptionStatus === 'free' && data.data.netSpreadPercentage >= 1.0) return;
             c.send(JSON.stringify(data));
+            broadcastCount++;
         }
     });
+    const duration = Date.now() - startTime;
+    if (duration > 100) {
+        console.log(`[WebSocket] Broadcast took ${duration}ms for ${broadcastCount} clients at ${new Date().toISOString()}`);
+    }
 };
 
 function createLoggerWithWSS(wssInstance, currentConfig) {
     const logLevel = (currentConfig.general && currentConfig.general.log_level) || "info";
     const log = (level, msg) => {
         const formattedMsg = `[${level.toUpperCase()}] ${new Date().toISOString()} - ${msg}`;
-        if (level === 'error') console.error(formattedMsg);
-        else if (level === 'warn') console.warn(formattedMsg);
-        else console.log(formattedMsg);
+        if (level === 'error') {
+            console.error(formattedMsg);
+            // Enviar notificação por e-mail para erros críticos
+            if (msg.includes('[CRITICAL]') || msg.includes('[RateLimit]')) {
+                sendPasswordResetEmail('admin@arbflash.com', 'Erro Crítico no Servidor', formattedMsg)
+                    .catch(err => console.error('[Email] Failed to send error notification:', err));
+            }
+        } else if (level === 'warn') {
+            console.warn(formattedMsg);
+        } else {
+            console.log(formattedMsg);
+        }
         
         if (wssInstance) {
             broadcastToClients(wssInstance, { type: 'log', level, message: msg });
@@ -51,269 +66,82 @@ function createLoggerWithWSS(wssInstance, currentConfig) {
     };
     return {
         info: (msg) => log('info', msg),
-        warn: (msg) => log('warn', msg),
         error: (msg) => log('error', msg),
-        debug: (msg) => { if (logLevel === "debug") log('debug', msg); }
+        warn: (msg) => log('warn', msg)
     };
 }
 
-class WebSocketOpportunitySignaler extends OpportunitySignaler {
-    constructor(sigConfig, signalerLogger, wssInstance) {
-        super(sigConfig, signalerLogger);
-        this.wss = wssInstance;
-        this.opportunities = [];
-        this.maxOpportunities = 30;
-    }
-    signal(opportunity) {
-        super.signal(opportunity);
-
-        // --- LÓGICA CORRIGIDA PARA O TIMESTAMP 'firstSeen' ---
-        const existingIndex = this.opportunities.findIndex(op => op.pair === opportunity.pair && op.direction === opportunity.direction);
-        
-        if (existingIndex > -1) {
-            // Se a oportunidade já existe, nós preservamos o timestamp original dela.
-            opportunity.firstSeen = this.opportunities[existingIndex].firstSeen;
-            this.opportunities[existingIndex] = opportunity; // Atualiza com os novos dados de mercado
-        } else {
-            // Se for uma oportunidade nova, nós criamos um novo timestamp.
-            opportunity.firstSeen = Date.now();
-            this.opportunities.unshift(opportunity);
-            if (this.opportunities.length > this.maxOpportunities) {
-                this.opportunities.pop();
-            }
-        }
-
-        // Envia para os clientes a oportunidade já com o timestamp 'firstSeen' correto.
-        broadcastToClients(this.wss, { type: 'opportunity', data: opportunity });
-    }
-    getOpportunities() { 
-        return this.opportunities; 
+// Função para limitar a frequência de broadcasting
+function throttleBroadcast(wss, data, interval = 500) {
+    if (!wss.lastBroadcast || (Date.now() - wss.lastBroadcast > interval)) {
+        broadcastToClients(wss, data);
+        wss.lastBroadcast = Date.now();
     }
 }
 
-async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
-    if (!connector) return [];
-    try {
-        logger.info(`[${exchangeName}] Starting to fetch futures contract details...`);
-        const maxRetries = 3;
-        const timeout = 15000;
-        
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error("Request timeout")), timeout)
-                );
-                
-                const fetchPromise = connector.getFuturesContractDetail();
-                const pairs = await Promise.race([fetchPromise, timeoutPromise]);
-                
-                if (!pairs.success || !Array.isArray(pairs.data)) { 
-                    logger.warn(`[${exchangeName}] Could not fetch pairs (attempt ${attempt}/${maxRetries}).`); 
-                    if (attempt === maxRetries) return [];
-                    continue;
-                }
-                
-                const blacklist = (exchangeConfig.blacklisted_tokens || "").split(",").map(t => t.trim().toUpperCase());
-                const filteredPairs = pairs.data
-                    .filter(c => c.quoteCoin === "USDT" && c.settleCoin === "USDT")
-                    .map(c => c.symbol.replace("_", "/"))
-                    .filter(p => !blacklist.includes(p.split("/")[0]));
-                
-                logger.info(`[${exchangeName}] Successfully fetched ${filteredPairs.length} pairs.`);
-                return filteredPairs;
-                
-            } catch (attemptError) {
-                logger.warn(`[${exchangeName}] Attempt ${attempt}/${maxRetries} failed: ${attemptError.message}`);
-                if (attempt === maxRetries) {
-                    logger.error(`[${exchangeName}] All attempts failed. Using empty pairs list.`);
-                    return [];
-                }
-                await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-            }
-        }
-        return [];
-    } catch (error) {
-        logger.error(`[fetchAndFilterPairs] Error for ${exchangeName}: ${error.message}`);
-        return [];
+const broadcastCallback = (data) => {
+    if (wss) {
+        throttleBroadcast(wss, { type: 'update', data }, 200); // Limita a 5 atualizações por segundo
     }
-}
-
-
-// --- 3. CONFIGURAÇÃO PRINCIPAL E INICIALIZAÇÃO ---
-
-const config = ini.parse(fs.readFileSync(path.resolve(__dirname, "conf.ini"), "utf-8"));
-const app = express();
-const server = http.createServer(app);
-
-// Configuração do CORS para ser mais restritivo em produção
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://app.arbflash.com', 'https://arbflash.com'] 
-    : 'http://localhost:3000',
-  credentials: true
 };
 
-app.set('trust proxy', 1);
-app.use(helmet()); // Adiciona cabeçalhos de segurança
-app.use(cors(corsOptions));
+// --- 3. CONFIGURAÇÃO DO SERVIDOR ---
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+app.use(helmet());
+app.use(cors({ origin: process.env.APP_BASE_URL || 'http://localhost:3000', credentials: true }));
 app.use(compression());
-
-const mySessionStore = new SequelizeStore({ db: sequelize });
-const sessionMiddleware = session({
-    secret: process.env.SESSION_SECRET,
-    store: mySessionStore,
-    resave: false,
-    saveUninitialized: false,
-    proxy: true,
-    cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        httpOnly: true,
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax'
-    }
-});
-app.use(sessionMiddleware);
-
-const wss = new WebSocket.Server({ noServer: true });
-const logger = createLoggerWithWSS(wss, config);
-
-User.hasOne(UserConfiguration);
-UserConfiguration.belongsTo(User);
-
-config.mexc.api_key = process.env.MY_MEXC_API_KEY;
-config.mexc.api_secret = process.env.MY_MEXC_API_SECRET;
-config.gateio.api_key = process.env.MY_GATEIO_API_KEY;
-config.gateio.api_secret = process.env.MY_GATEIO_API_SECRET;
-
-const connectors = { mexc: new MEXCConnector(config.mexc, logger), gateio: new GateConnector(config.gateio, logger) };
-const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger, wss);
-const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger);
-let marketMonitor;
-
-
-// --- 4. DEFINIÇÃO DE ROTAS E LÓGICA DE EXECUÇÃO ---
-
-// A rota do webhook do Stripe precisa vir ANTES do express.json()
-const paymentRoutes = require('./routes/payment.routes');
-app.use('/api/payments', paymentRoutes);
-
-// Agora usamos o express.json() para as outras rotas
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
-// Servir os ficheiros estáticos da pasta 'public'
-app.use(express.static(path.join(__dirname, 'public')));
-
-const userRoutes = require('./routes/user.routes');
-app.use('/api/users', userRoutes);
-
-const passwordResetRoutes = require('./routes/passwordReset.routes');
-app.use('/api/users', passwordResetRoutes);
-
-const isAuthenticated = (req, res, next) => {
-    if (req.session && req.session.userId) {
-        return next();
-    }
-    res.status(401).json({ message: "Acesso não autorizado. Por favor, faça login para continuar." });
-};
-
-app.post('/api/config/arbitrage', isAuthenticated, (req, res) => {
-    const { enableFuturesVsFutures } = req.body;
-    if (typeof enableFuturesVsFutures === 'boolean') {
-        config.arbitrage.enable_futures_vs_futures = enableFuturesVsFutures;
-        logger.info(`Strategy 'Futures vs Futures' was ${enableFuturesVsFutures ? 'ATIVADA' : 'DESATIVADA'} pelo utilizador ${req.session.userId}.`);
-        res.status(200).json({ success: true, message: 'Configuração de Futuros vs Futuros atualizada.' });
-    } else {
-        res.status(400).json({ success: false, message: 'Valor inválido fornecido.' });
-    }
+const mySessionStore = new SequelizeStore({
+    db: sequelize,
+    tableName: 'Sessions'
 });
 
-app.post('/api/config/arbitrage/spot', isAuthenticated, (req, res) => {
-    const { enableSpotVsSpot } = req.body;
-    if (typeof enableSpotVsSpot === 'boolean') {
-        config.arbitrage.enable_spot_vs_spot = enableSpotVsSpot;
-        logger.info(`Strategy 'Spot vs Spot' was ${enableSpotVsSpot ? 'ATIVADA' : 'DESATIVADA'} pelo utilizador ${req.session.userId}.`);
-        res.status(200).json({ success: true, message: 'Configuração de Spot vs Spot atualizada.' });
-    } else {
-        res.status(400).json({ success: false, message: 'Valor inválido fornecido.' });
-    }
-});
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'default_secret',
+    resave: false,
+    saveUninitialized: false,
+    store: mySessionStore,
+    cookie: { secure: process.env.NODE_ENV === 'production' }
+}));
 
-app.get('/api/opportunities', isAuthenticated, (req, res) => res.json(opportunitySignaler.getOpportunities()));
-app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: config.arbitrage, exchanges: config.exchanges }));
+function isAuthenticated(req, res, next) {
+    if (!req.session.userId) return res.status(401).json({ message: 'Unauthorized' });
+    next();
+}
 
+// --- 4. LÓGICA DO BOT ---
+let marketMonitor = null;
+let arbitrageEngine = null;
+let logger = null;
+let connectors = {};
+let pairsByExchange = { mexc: [], gateio: [] };
 
-server.on('upgrade', (request, socket, head) => {
-    sessionMiddleware(request, {}, () => {
-        if (!request.session.userId) {
-            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-            socket.destroy();
-            return;
-        }
-        wss.handleUpgrade(request, socket, head, (ws) => {
-            ws.userId = request.session.userId;
-            wss.emit('connection', ws, request);
-        });
-    });
-});
-
-wss.on("connection", async (wsClient) => {
-    logger.info(`User ${wsClient.userId} connected via WebSocket.`);
+const initializeAndStartBot = () => {
     try {
-        const user = await User.findByPk(wsClient.userId);
-        if (user) {
-            wsClient.subscriptionStatus = user.subscriptionStatus;
-            logger.info(`User ${wsClient.userId} subscription status: ${wsClient.subscriptionStatus}`);
-        } else {
-            logger.warn(`User ${wsClient.userId} not found in database.`);
-            wsClient.subscriptionStatus = 'free';
-        }
+        const configFile = fs.readFileSync(path.join(__dirname, 'conf.ini'), 'utf-8');
+        const currentConfig = ini.parse(configFile);
 
-        const initialOpportunities = opportunitySignaler.getOpportunities().filter(op => {
-            if (wsClient.subscriptionStatus === 'free' && op.netSpreadPercentage >= 1.0) {
-                return false;
-            }
-            return true;
-        });
-        wsClient.send(JSON.stringify({ type: 'opportunities', data: initialOpportunities }));
+        logger = createLoggerWithWSS(wss, currentConfig);
 
-        if (marketMonitor) wsClient.send(JSON.stringify({ type: 'all_pairs_update', data: marketMonitor.getAllMarketData() }));
-    } catch (e) {
-        logger.error(`Error sending initial data to user ${wsClient.userId}: ${e.message}`);
-    }
-    wsClient.on("close", () => logger.info(`User ${wsClient.userId} disconnected.`));
-});
+        // Configurar conectores
+        connectors.mexc = new MEXCConnector(currentConfig.mexc, logger);
+        connectors.gateio = new GateConnector(currentConfig.gateio, logger);
 
-async function initializeAndStartBot() {
-    logger.info("Initializing bot with Centralized Scanner model...");
-    try {
-        const fallbackPairs = {
-            mexc: ["BTC/USDT", "ETH/USDT"],
-            gateio: ["BTC/USDT", "ETH/USDT"]
-        };
-        const startTime = Date.now();
-        const [mexcPairs, gateioPairs] = await Promise.all([
-            fetchAndFilterPairs(connectors.mexc, "MEXC", config.mexc),
-            fetchAndFilterPairs(connectors.gateio, "GateIO", config.gateio)
-        ]);
-        const fetchTime = Date.now() - startTime;
-        logger.info(`Pairs fetching completed in ${fetchTime}ms`);
+        // Carregar pares de monitoramento
+        pairsByExchange.mexc = (currentConfig.mexc.debug_pairs || '').split(',').map(p => p.trim()).filter(p => p);
+        pairsByExchange.gateio = (currentConfig.gateio.debug_pairs || '').split(',').map(p => p.trim()).filter(p => p);
 
-        const pairsByExchange = {
-            mexc: mexcPairs.length > 0 ? mexcPairs : fallbackPairs.mexc,
-            gateio: gateioPairs.length > 0 ? gateioPairs : fallbackPairs.gateio
-        };
+        // Inicializar engine e signaler
+        const signaler = new OpportunitySignaler(currentConfig.signaling, logger);
+        arbitrageEngine = new ArbitrageEngine(currentConfig, signaler, logger);
 
-        if (mexcPairs.length === 0) logger.warn("Using fallback pairs for MEXC due to fetch failure");
-        if (gateioPairs.length === 0) logger.warn("Using fallback pairs for Gate.io due to fetch failure");
-
-        logger.info(`Starting market monitor with ${pairsByExchange.mexc.length} MEXC pairs and ${pairsByExchange.gateio.length} Gate.io pairs`);
-
-        const broadcastCallback = () => {
-            if (marketMonitor) broadcastToClients(wss, { type: 'all_pairs_update', data: marketMonitor.getAllMarketData() });
-        };
-        marketMonitor = new MarketMonitor(connectors, pairsByExchange, arbitrageEngine, logger, config, broadcastCallback);
+        // Inicializar monitor de mercado
+        marketMonitor = new MarketMonitor(connectors, pairsByExchange, arbitrageEngine, logger, currentConfig, broadcastCallback);
         if (Object.keys(connectors).length > 0 && (pairsByExchange.mexc?.length > 0 || pairsByExchange.gateio?.length > 0)) {
             logger.info("Starting market monitor...");
             marketMonitor.start();
@@ -345,10 +173,29 @@ app.get('/', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'p
 
 // Middleware de tratamento de erros global (deve ser o último)
 app.use((err, req, res, next) => {
-  console.error("ERRO INESPERADO:", err.stack);
-  res.status(500).json({ message: "Ocorreu um erro inesperado no servidor." });
+    console.error("ERRO INESPERADO:", err.stack);
+    res.status(500).json({ message: "Ocorreu um erro inesperado no servidor." });
 });
 
+wss.on('connection', (ws) => {
+    ws.userId = null;
+    ws.subscriptionStatus = 'free';
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            if (data.type === 'auth' && data.userId) {
+                ws.userId = data.userId;
+                ws.subscriptionStatus = data.subscriptionStatus || 'free';
+                logger.info(`[WebSocket] User ${ws.userId} connected with status ${ws.subscriptionStatus}`);
+            }
+        } catch (e) {
+            logger.error(`[WebSocket] Invalid message: ${e.message}`);
+        }
+    });
+    ws.on('close', () => {
+        logger.info(`[WebSocket] User ${ws.userId} disconnected`);
+    });
+});
 
 // --- 6. INÍCIO DA EXECUÇÃO ---
 sequelize.sync({ alter: true })
