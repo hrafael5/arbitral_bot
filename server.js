@@ -1,4 +1,4 @@
-// /server.js (VERSÃO COMPLETA E REVISADA)
+// /server.js (VERSÃO COM GATE.IO DESATIVADA PARA TESTE)
 
 // A linha abaixo deve ser a PRIMEIRA LINHA do seu ficheiro
 require('dotenv').config();
@@ -10,7 +10,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const ini = require('ini');
-const fs =require('fs');
+const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
 const session = require('express-session');
@@ -20,7 +20,7 @@ const UserConfiguration = require('./models/userConfiguration.model');
 const SequelizeStore = require("connect-session-sequelize")(session.Store);
 
 const MEXCConnector = require('./lib/MEXCConnector');
-const GateConnector = require('./lib.GateConnector');
+// const GateConnector = require('./lib/GateConnector'); // <<-- DESATIVADO TEMPORARIAMENTE
 const MarketMonitor = require('./lib/MarketMonitor');
 const ArbitrageEngine = require('./lib/ArbitrageEngine');
 const OpportunitySignaler = require('./lib/OpportunitySignaler');
@@ -32,9 +32,8 @@ function broadcastToClients(wssInstance, data) {
     if (!wssInstance || !wssInstance.clients) return;
     wssInstance.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN && client.userId) {
-            // Regra de negócio para utilizadores 'free'
             if (data.type === 'opportunity' && client.subscriptionStatus === 'free' && data.data.netSpreadPercentage >= 1.0) {
-                return; // Não envia oportunidades com lucro >= 1% para utilizadores free
+                return;
             }
             client.send(JSON.stringify(data));
         }
@@ -57,20 +56,17 @@ function createLoggerWithWSS(wssInstance, currentConfig) {
     };
 }
 
-// Classe estendida para enviar oportunidades via WebSocket
 class WebSocketOpportunitySignaler extends OpportunitySignaler {
     constructor(sigConfig, signalerLogger, wssInstance) {
         super(sigConfig, signalerLogger);
         this.wss = wssInstance;
         this.opportunities = [];
-        this.maxOpportunities = 50; // Aumentado para ter um buffer maior
+        this.maxOpportunities = 50;
     }
     
     signal(opportunity) {
-        super.signal(opportunity); // Chama o método base para loggar no console/arquivo
-
+        super.signal(opportunity);
         const existingIndex = this.opportunities.findIndex(op => op.pair === opportunity.pair && op.direction === opportunity.direction);
-        
         if (existingIndex > -1) {
             opportunity.firstSeen = this.opportunities[existingIndex].firstSeen;
             this.opportunities[existingIndex] = opportunity;
@@ -94,18 +90,15 @@ async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig, logg
     try {
         logger.info(`[${exchangeName}] Iniciando busca de detalhes de contratos de futuros...`);
         const pairs = await connector.getFuturesContractDetail();
-        
         if (!pairs.success || !Array.isArray(pairs.data)) { 
             logger.warn(`[${exchangeName}] Não foi possível buscar os pares.`); 
             return [];
         }
-        
         const blacklist = (exchangeConfig.blacklisted_tokens || "").split(",").map(t => t.trim().toUpperCase());
         const filteredPairs = pairs.data
             .filter(c => c.quoteCoin === "USDT" && c.settleCoin === "USDT")
             .map(c => c.symbol.replace("_", "/"))
             .filter(p => !blacklist.includes(p.split("/")[0]));
-        
         logger.info(`[${exchangeName}] Sucesso! ${filteredPairs.length} pares encontrados e filtrados.`);
         return filteredPairs;
     } catch (error) {
@@ -116,7 +109,8 @@ async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig, logg
 
 
 // --- 3. CONFIGURAÇÃO PRINCIPAL E INICIALIZAÇÃO ---
-
+// ... (O resto do seu código de configuração do express, session, etc. continua aqui)
+// (Vou omitir para não ser repetitivo, pois essa parte está correta)
 const config = ini.parse(fs.readFileSync(path.resolve(__dirname, "conf.ini"), "utf-8"));
 const app = express();
 const server = http.createServer(app);
@@ -149,15 +143,15 @@ app.use(sessionMiddleware);
 const wss = new WebSocket.Server({ noServer: true });
 const logger = createLoggerWithWSS(wss, config);
 
-// Relações do Sequelize
 User.hasOne(UserConfiguration);
 UserConfiguration.belongsTo(User);
+
 
 // --- 4. LÓGICA DO BOT ---
 
 const connectors = { 
     mexc: new MEXCConnector(config.mexc, logger), 
-    gateio: new GateConnector(config.gateio, logger) 
+    // gateio: new GateConnector(config.gateio, logger) // <<-- DESATIVADO TEMPORARIAMENTE
 };
 const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger, wss);
 const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger);
@@ -166,7 +160,6 @@ let marketMonitor;
 async function initializeAndStartBot() {
     logger.info("Inicializando a lógica do bot...");
 
-    // Flag para alternar entre modo de teste (com pares fixos) e produção (com busca dinâmica)
     const IS_TEST_MODE = true; 
     let pairsByExchange;
 
@@ -174,29 +167,21 @@ async function initializeAndStartBot() {
         logger.warn(">>> MODO DE TESTE ATIVO <<< Usando lista de pares fixa (BTC, ETH).");
         pairsByExchange = {
             mexc: ["BTC/USDT", "ETH/USDT"],
-            gateio: ["BTC/USDT", "ETH/USDT"]
+            // gateio: ["BTC/USDT", "ETH/USDT"] // <<-- DESATIVADO TEMPORARIAMENTE
         };
     } else {
         logger.info("Modo de produção. Buscando pares dinamicamente...");
-        const [mexcPairs, gateioPairs] = await Promise.all([
-            fetchAndFilterPairs(connectors.mexc, "MEXC", config.mexc, logger),
-            fetchAndFilterPairs(connectors.gateio, "GateIO", config.gateio, logger)
-        ]);
-
+        const mexcPairs = await fetchAndFilterPairs(connectors.mexc, "MEXC", config.mexc, logger);
         pairsByExchange = {
             mexc: mexcPairs.length > 0 ? mexcPairs : ["BTC/USDT", "ETH/USDT"],
-            gateio: gateioPairs.length > 0 ? gateioPairs : ["BTC/USDT", "ETH/USDT"]
         };
         if (mexcPairs.length === 0) logger.warn("Usando pares de fallback para MEXC.");
-        if (gateioPairs.length === 0) logger.warn("Usando pares de fallback para Gate.io.");
     }
     
-    // Callback para o MarketMonitor notificar o frontend sobre mudanças nos dados
     const broadcastCallback = () => {
         if (marketMonitor) broadcastToClients(wss, { type: 'all_pairs_update', data: marketMonitor.getAllMarketData() });
     };
 
-    // Inicializa e inicia o MarketMonitor com todas as dependências
     marketMonitor = new MarketMonitor(connectors, pairsByExchange, arbitrageEngine, logger, config, broadcastCallback);
     marketMonitor.start();
     
@@ -205,10 +190,10 @@ async function initializeAndStartBot() {
 
 
 // --- 5. ROTAS DA API E SERVIDOR WEBSOCKET ---
-
-// Rotas que não precisam de autenticação de sessão
+// ... (Seu código de rotas continua aqui, ele está correto)
+// (Vou omitir para não ser repetitivo)
 const paymentRoutes = require('./routes/payment.routes');
-app.use('/api/payments', paymentRoutes); // Webhook do Stripe
+app.use('/api/payments', paymentRoutes);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 const userRoutes = require('./routes/user.routes');
@@ -216,19 +201,15 @@ app.use('/api/users', userRoutes);
 const passwordResetRoutes = require('./routes/passwordReset.routes');
 app.use('/api/users', passwordResetRoutes);
 
-// Middleware de autenticação para as rotas seguintes
 const isAuthenticated = (req, res, next) => {
     if (req.session && req.session.userId) return next();
     res.status(401).json({ message: "Acesso não autorizado." });
 };
 
 app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: config.arbitrage, exchanges: config.exchanges }));
-
-// Servir a aplicação frontend (após as rotas da API)
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-// Upgrade do servidor HTTP para WebSocket
 server.on('upgrade', (request, socket, head) => {
     sessionMiddleware(request, {}, () => {
         if (!request.session.userId) {
@@ -247,21 +228,17 @@ wss.on("connection", async (wsClient) => {
     try {
         const user = await User.findByPk(wsClient.userId);
         wsClient.subscriptionStatus = user ? user.subscriptionStatus : 'free';
-        
-        // Envia dados iniciais respeitando o status da assinatura
         const initialOpportunities = opportunitySignaler.getOpportunities().filter(op => 
             !(wsClient.subscriptionStatus === 'free' && op.netSpreadPercentage >= 1.0)
         );
         wsClient.send(JSON.stringify({ type: 'opportunities', data: initialOpportunities }));
         if (marketMonitor) wsClient.send(JSON.stringify({ type: 'all_pairs_update', data: marketMonitor.getAllMarketData() }));
-
     } catch (e) {
         logger.error(`Erro ao enviar dados iniciais para o utilizador ${wsClient.userId}: ${e.message}`);
     }
     wsClient.on("close", () => logger.info(`Utilizador ${wsClient.userId} desconectou-se.`));
 });
 
-// Middleware de tratamento de erros global
 app.use((err, req, res, next) => {
   console.error("ERRO INESPERADO:", err.stack);
   res.status(500).json({ message: "Ocorreu um erro inesperado no servidor." });
