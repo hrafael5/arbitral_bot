@@ -1,5 +1,5 @@
 // --- ESTADO INICIAL E SELETORES DOM ---
-const OPPORTUNITY_TTL_MS = 10000;
+const OPPORTUNITY_TTL_MS = 1500;
 const DEFAULT_CAPITAL_STORAGE_KEY = 'arbitrageDashboard_defaultCapital_v1';
 const MONITOR_PARES_EXPANDED_KEY = 'arbitrageDashboard_monitorParesExpanded_v1';
 const WATCHED_PAIRS_EXPANDED_KEY = 'arbitrageDashboard_watchedPairsExpanded_v1';
@@ -137,7 +137,7 @@ const filterFundingMinInput = document.getElementById('filter-funding-min');
 const filterFundingMaxInput = document.getElementById('filter-funding-max');
 
 let uiUpdateScheduled = false;
-const UI_UPDATE_INTERVAL_MS = 200;
+const UI_UPDATE_INTERVAL_MS = 50;
 let ws = null;
 
 function escapeHTML(str) {
