@@ -1,4 +1,3 @@
-```javascript
 // A linha abaixo deve ser a PRIMEIRA LINHA do seu ficheiro
 require('dotenv').config();
 
@@ -43,7 +42,8 @@ const broadcastToClients = (wssInstance, data) => {
 function createLoggerWithWSS(wssInstance, currentConfig) {
     const logLevel = (currentConfig.general && currentConfig.general.log_level) || "info";
     const log = (level, msg) => {
-        const formattedMsg = `[${level.toUpperCase()}] ${new Date().toISOString()} - ${msg}`;
+        // LINHA CORRIGIDA:
+        const formattedMsg = '[' + level.toUpperCase() + '] ' + new Date().toISOString() + ' - ' + msg;
         if (level === 'error') console.error(formattedMsg);
         else if (level === 'warn') console.warn(formattedMsg);
         else console.log(formattedMsg);
@@ -309,4 +309,3 @@ sequelize.sync({ alter: true })
         else console.error(`[CRITICAL] Could not connect/sync to the database: ${err.message}`);
         process.exit(1);
     });
-```
