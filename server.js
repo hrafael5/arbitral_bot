@@ -21,8 +21,8 @@ const pako = require('pako');
 const MEXCConnector = require('./lib/MEXCConnector');
 const GateConnector = require('./lib/GateConnector');
 const MarketMonitor = require('./lib/MarketMonitor');
-const ArbitrageEngine = require('./lib/ArbitrageEngine');
-const OpportunitySignaler = require('./lib/OpportunitySignaler');
+const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger, wss);
+const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger);
 
 // --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES ---
 
