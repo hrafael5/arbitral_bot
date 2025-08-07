@@ -21,8 +21,8 @@ const pako = require('pako');
 const MEXCConnector = require('./lib/MEXCConnector');
 const GateConnector = require('./lib/GateConnector');
 const MarketMonitor = require('./lib/MarketMonitor');
-const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger, wss);
-const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger);
+const ArbitrageEngine = require('./lib/ArbitrageEngine');
+const OpportunitySignaler = require('./lib/OpportunitySignaler');
 
 // --- 2. DEFINIÇÃO DE FUNÇÕES E CLASSES AUXILIARES ---
 
@@ -42,7 +42,6 @@ const broadcastToClients = (wssInstance, data) => {
 function createLoggerWithWSS(wssInstance, currentConfig) {
     const logLevel = (currentConfig.general && currentConfig.general.log_level) || "info";
     const log = (level, msg) => {
-        // LINHA CORRIGIDA:
         const formattedMsg = '[' + level.toUpperCase() + '] ' + new Date().toISOString() + ' - ' + msg;
         if (level === 'error') console.error(formattedMsg);
         else if (level === 'warn') console.warn(formattedMsg);
@@ -126,17 +125,20 @@ function loadConfig() {
     };
 }
 
+// Lógica de inicialização do bot. Fica aqui para ser chamada depois.
 function initializeAndStartBot() {
     try {
         const config = loadConfig();
+        // O logger usa 'wss', que é uma variável global neste escopo
         const logger = createLoggerWithWSS(wss, config);
 
         const mexcConnector = new MEXCConnector(config.mexc, logger);
         const gateConnector = new GateConnector(config.gateio, logger);
         const connectors = { mexc: mexcConnector, gateio: gateConnector };
 
-        const arbitrageEngine = new ArbitrageEngine(config.arbitrage, logger);
+        // CORREÇÃO: Ordem de criação e argumentos corretos
         const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger, wss);
+        const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger);
 
         const fetchTimeStart = Date.now();
         let mexcPairs = [];
@@ -146,7 +148,6 @@ function initializeAndStartBot() {
             gateio: ['BTC/USDT', 'ETH/USDT']
         };
 
-        // Simulação de fetch de pares (substitua por lógica real se necessário)
         mexcPairs = fallbackPairs.mexc;
         gateioPairs = fallbackPairs.gateio;
         const fetchTime = Date.now() - fetchTimeStart;
@@ -165,7 +166,10 @@ function initializeAndStartBot() {
         const broadcastCallback = () => {
             if (marketMonitor) broadcastToClients(wss, { type: 'all_pairs_update', data: marketMonitor.getAllMarketData() });
         };
+        
+        // a variável 'marketMonitor' é declarada no escopo global para ser acessível
         marketMonitor = new MarketMonitor(connectors, pairsByExchange, arbitrageEngine, logger, config, broadcastCallback);
+        
         if (Object.keys(connectors).length > 0 && (pairsByExchange.mexc?.length > 0 || pairsByExchange.gateio?.length > 0)) {
             logger.info("Starting market monitor...");
             marketMonitor.start();
@@ -174,20 +178,34 @@ function initializeAndStartBot() {
             logger.error("[CRITICAL] No exchanges or pairs found. Bot will be idle.");
         }
     } catch (error) {
-        logger.error(`[CRITICAL] Failed to initialize bot logic: ${error.message}`);
-        logger.error("Stack trace:", error.stack);
+        // Usa o logger global 'logger' se ele já foi inicializado, caso contrário, usa console.error
+        const logError = logger ? logger.error : console.error;
+        logError(`[CRITICAL] Failed to initialize bot logic: ${error.message}`);
+        logError("Stack trace:", error.stack);
     }
 }
 
 const shutdown = () => {
-    logger.info("Shutting down...");
+    if (logger) logger.info("Shutting down...");
+    else console.log("Shutting down...");
+    
     if (marketMonitor) marketMonitor.stop();
+    
     server.close(() => {
-        logger.info("Server closed.");
-        sequelize.close().then(() => logger.info("Database connection closed."));
-        process.exit(0);
+        if (logger) logger.info("Server closed.");
+        else console.log("Server closed.");
+        
+        sequelize.close().then(() => {
+            if (logger) logger.info("Database connection closed.");
+            else console.log("Database connection closed.");
+            process.exit(0);
+        });
     });
-    setTimeout(() => { logger.warn("Forcing shutdown after timeout."); process.exit(1); }, 10000);
+    setTimeout(() => { 
+        if(logger) logger.warn("Forcing shutdown after timeout.");
+        else console.warn("Forcing shutdown after timeout.");
+        process.exit(1); 
+    }, 10000);
 };
 
 // --- 3. CONFIGURAÇÃO DO SERVIDOR ---
@@ -198,114 +216,9 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Configuração da sessão
-const mySessionStore = new SequelizeStore({
-    db: sequelize
-});
+const mySessionStore = new SequelizeStore({ db: sequelize });
 app.use(session({
     secret: process.env.SESSION_SECRET || 'default-secret-change-me',
     resave: false,
     saveUninitialized: false,
-    store: mySessionStore,
-    cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 24 * 60 * 60 * 1000 // 24 horas
-    }
-}));
-
-// Middleware de autenticação (assumindo que está em outro arquivo)
-const isAuthenticated = (req, res, next) => {
-    if (req.session.userId) {
-        req.session.subscriptionStatus = req.session.subscriptionStatus || 'free'; // Simula status
-        return next();
-    }
-    res.status(401).json({ message: 'Unauthorized' });
-};
-
-// Rota para servir a página principal
-app.get('/', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
-// Middleware de tratamento de erros global
-app.use((err, req, res, next) => {
-    console.error("ERRO INESPERADO:", err.stack);
-    res.status(500).json({ message: "Ocorreu um erro inesperado no servidor." });
-});
-
-// --- 4. CONFIGURAÇÃO DO WEBSOCKET ---
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, path: '/ws' });
-
-// Configuração de ping/pong para manter conexões vivas
-const pingInterval = setInterval(() => {
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(pako.deflate(JSON.stringify({ type: 'ping' }), { to: 'string' }));
-        }
-    });
-}, 30000); // Ping a cada 30 segundos
-
-wss.on('connection', (ws, req) => {
-    const userId = req.session.userId;
-    const subscriptionStatus = req.session.subscriptionStatus || 'free'; // Simula status de assinatura
-    ws.userId = userId;
-    ws.subscriptionStatus = subscriptionStatus;
-    ws.isAlive = true;
-
-    ws.on('pong', () => { ws.isAlive = true; });
-    ws.on('message', (message) => {
-        const data = JSON.parse(pako.inflate(message, { to: 'string' }));
-        if (data.type === 'pong') return;
-        // Lógica para mensagens do cliente (ex.: filtros, ações)
-        broadcastToClients(wss, { type: 'client_message', data });
-    });
-
-    ws.on('close', () => {
-        ws.isAlive = false;
-    });
-
-    ws.on('error', (error) => {
-        logger.error(`[WebSocket] Error on connection: ${error.message}`);
-    });
-});
-
-// Verifica conexões inativas a cada 60 segundos
-const cleanupInterval = setInterval(() => {
-    wss.clients.forEach((ws) => {
-        if (ws.isAlive === false) return ws.terminate();
-        ws.isAlive = false;
-        ws.ping();
-    });
-}, 60000);
-
-// Limpeza dos intervalos em caso de shutdown
-process.on('SIGINT', () => {
-    clearInterval(pingInterval);
-    clearInterval(cleanupInterval);
-    shutdown();
-});
-process.on('SIGTERM', () => {
-    clearInterval(pingInterval);
-    clearInterval(cleanupInterval);
-    shutdown();
-});
-
-// --- 6. INÍCIO DA EXECUÇÃO ---
-let marketMonitor = null;
-let logger = null;
-
-sequelize.sync({ alter: true })
-    .then(() => {
-        mySessionStore.sync();
-        logger = createLoggerWithWSS(wss, loadConfig()); // Inicializa logger após sync
-        logger.info("Database and session store synchronized.");
-        const PORT = process.env.PORT || 3000;
-        server.listen(PORT, () => {
-            logger.info(`Server listening on port ${PORT}.`);
-            initializeAndStartBot();
-        });
-    })
-    .catch(err => {
-        if (logger) logger.error(`[CRITICAL] Could not connect/sync to the database: ${err.message}`);
-        else console.error(`[CRITICAL] Could not connect/sync to the database: ${err.message}`);
-        process.exit(1);
-    });
+    store: mySession
