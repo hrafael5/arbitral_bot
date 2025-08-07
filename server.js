@@ -125,18 +125,15 @@ function loadConfig() {
     };
 }
 
-// Lógica de inicialização do bot. Fica aqui para ser chamada depois.
 function initializeAndStartBot() {
     try {
         const config = loadConfig();
-        // O logger usa 'wss', que é uma variável global neste escopo
         const logger = createLoggerWithWSS(wss, config);
 
         const mexcConnector = new MEXCConnector(config.mexc, logger);
         const gateConnector = new GateConnector(config.gateio, logger);
         const connectors = { mexc: mexcConnector, gateio: gateConnector };
 
-        // CORREÇÃO: Ordem de criação e argumentos corretos
         const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger, wss);
         const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger);
 
@@ -167,7 +164,6 @@ function initializeAndStartBot() {
             if (marketMonitor) broadcastToClients(wss, { type: 'all_pairs_update', data: marketMonitor.getAllMarketData() });
         };
         
-        // a variável 'marketMonitor' é declarada no escopo global para ser acessível
         marketMonitor = new MarketMonitor(connectors, pairsByExchange, arbitrageEngine, logger, config, broadcastCallback);
         
         if (Object.keys(connectors).length > 0 && (pairsByExchange.mexc?.length > 0 || pairsByExchange.gateio?.length > 0)) {
@@ -178,7 +174,6 @@ function initializeAndStartBot() {
             logger.error("[CRITICAL] No exchanges or pairs found. Bot will be idle.");
         }
     } catch (error) {
-        // Usa o logger global 'logger' se ele já foi inicializado, caso contrário, usa console.error
         const logError = logger ? logger.error : console.error;
         logError(`[CRITICAL] Failed to initialize bot logic: ${error.message}`);
         logError("Stack trace:", error.stack);
@@ -221,4 +216,112 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'default-secret-change-me',
     resave: false,
     saveUninitialized: false,
-    store: mySession
+    store: mySessionStore,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 24 * 60 * 60 * 1000 // 24 horas
+    }
+}));
+
+const isAuthenticated = (req, res, next) => {
+    if (req.session.userId) {
+        req.session.subscriptionStatus = req.session.subscriptionStatus || 'free';
+        return next();
+    }
+    if (process.env.NODE_ENV !== 'production') {
+        req.session.userId = 'dev-user';
+        req.session.subscriptionStatus = 'premium';
+        return next();
+    }
+    res.status(401).json({ message: 'Unauthorized' });
+};
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+app.use((err, req, res, next) => {
+    console.error("ERRO INESPERADO:", err.stack);
+    res.status(500).json({ message: "Ocorreu um erro inesperado no servidor." });
+});
+
+// --- 4. CONFIGURAÇÃO DO WEBSOCKET ---
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server, path: '/ws' });
+
+const pingInterval = setInterval(() => {
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(pako.deflate(JSON.stringify({ type: 'ping' }), { to: 'string' }));
+        }
+    });
+}, 30000);
+
+wss.on('connection', (ws, req) => {
+    const sessionParser = session({
+        secret: process.env.SESSION_SECRET || 'default-secret-change-me',
+        resave: false,
+        saveUninitialized: false,
+        store: mySessionStore
+    });
+
+    sessionParser(req, {}, () => {
+        ws.userId = req.session.userId || 'guest-' + Date.now();
+        ws.subscriptionStatus = req.session.subscriptionStatus || 'free';
+        ws.isAlive = true;
+
+        if (logger) logger.info(`[WebSocket] Client connected: ${ws.userId} (${ws.subscriptionStatus})`);
+        
+        ws.on('pong', () => { ws.isAlive = true; });
+        ws.on('message', (message) => {
+            try {
+                const data = JSON.parse(pako.inflate(message, { to: 'string' }));
+                if (data.type === 'pong') return;
+            } catch (e) {
+                if(logger) logger.warn(`[WebSocket] Received invalid message from ${ws.userId}`);
+            }
+        });
+        ws.on('close', () => {
+            ws.isAlive = false;
+            if(logger) logger.info(`[WebSocket] Client disconnected: ${ws.userId}`);
+        });
+        ws.on('error', (error) => {
+            if(logger) logger.error(`[WebSocket] Error on connection for ${ws.userId}: ${error.message}`);
+        });
+    });
+});
+
+const cleanupInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) return ws.terminate();
+        ws.isAlive = false;
+        ws.ping(() => {});
+    });
+}, 60000);
+
+// --- 5. LIMPEZA E SHUTDOWN ---
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
+// --- 6. INÍCIO DA EXECUÇÃO ---
+let marketMonitor = null;
+let logger = null; 
+
+sequelize.sync({ alter: true })
+    .then(() => {
+        mySessionStore.sync();
+        const initialConfig = loadConfig();
+        logger = createLoggerWithWSS(wss, initialConfig);
+        
+        logger.info("Database and session store synchronized.");
+        const PORT = process.env.PORT || 3000;
+        
+        server.listen(PORT, () => {
+            logger.info(`Server listening on port ${PORT}.`);
+            initializeAndStartBot();
+        });
+    })
+    .catch(err => {
+        console.error(`[CRITICAL] Could not connect/sync to the database: ${err.message}`);
+        console.error(err.stack);
+        process.exit(1);
+    });
