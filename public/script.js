@@ -1,10 +1,9 @@
 // --- ESTADO INICIAL E SELETORES DOM ---
-const OPPORTUNITY_TTL_MS = 1500;
+const OPPORTUNITY_TTL_MS = 10000;
 const DEFAULT_CAPITAL_STORAGE_KEY = 'arbitrageDashboard_defaultCapital_v1';
 const MONITOR_PARES_EXPANDED_KEY = 'arbitrageDashboard_monitorParesExpanded_v1';
 const WATCHED_PAIRS_EXPANDED_KEY = 'arbitrageDashboard_watchedPairsExpanded_v1';
-const BLOCKED_OPS_EXPANDED_KEY = 'arbitrageDashboard_blockedOpsExpanded_v1';
-const HIDDEN_WATCHED_OPS_STORAGE_KEY = 'arbitrageDashboard_hiddenWatchedOps_v1';
+const HIDDEN_WATCHED_OPS_STORAGE_KEY = 'arbitrageDashboard_hiddenWatchedOps_v1'; // Nova chave para localStorage
 
 const state = {
   allPairsData: [],
@@ -42,14 +41,13 @@ const state = {
   favoritedOps: [],
   blockedOps: [],
   watchedPairsList: [],
-  hiddenWatchedOps: new Set(),
+  hiddenWatchedOps: new Set(), // Alterado para Set para melhor performance
   soundEnabled: false,
   soundPermissionGranted: false,
   soundProfitThreshold: 0.0,
   soundPlayedForVisibleOps: new Set(),
   isWatchedPairsExpanded: false,
   isMonitorParesExpanded: false,
-  isBlockedOpsExpanded: false,
   sidebarCollapsed: false,
   currentView: 'arbitragens',
   showBlockedOps: false,
@@ -58,10 +56,6 @@ const state = {
 };
 
 window.frontendState = state;
-
-// --- ALTERAÇÃO INICIA AQUI (1/3): Adicionado gerenciador de janelas de calculadora ---
-const openCalculators = new Map(); // Para gerenciar janelas abertas
-// --- ALTERAÇÃO TERMINA AQUI (1/3) ---
 
 const FAVORITES_STORAGE_KEY = 'arbitrageDashboard_favoritedOps_v1';
 const BLOCKED_STORAGE_KEY = 'arbitrageDashboard_blockedOps_v2';
@@ -89,6 +83,9 @@ const elements = {
   connectionDot: document.getElementById('connection-dot'),
   connectionText: document.getElementById('connection-text'),
   lastUpdated: document.getElementById('last-updated'),
+  toggleBlockedOps: document.getElementById('toggle-blocked-ops'),
+  eyeIcon: document.getElementById('eye-icon'),
+  eyeOffIcon: document.getElementById('eye-off-icon'),
   toggleSoundButton: document.getElementById('toggle-sound-button'),
   soundOnIcon: document.getElementById('sound-on-icon'),
   soundOffIcon: document.getElementById('sound-off-icon'),
@@ -126,10 +123,6 @@ const watchedPairsCountEl = document.getElementById('watched-pairs-count');
 const blockedOpsCountEl = document.getElementById('blocked-ops-count');
 const blockedOpsTableBodyEl = document.getElementById('blocked-ops-table-body');
 
-const blockedOpsHeaderEl = document.getElementById('blocked-ops-header');
-const blockedOpsTableContainerEl = document.getElementById('blocked-ops-table-container');
-const blockedOpsToggleIconEl = document.getElementById('blocked-ops-toggle-icon');
-
 const watchedPairsHeaderEl = document.getElementById('watched-pairs-header');
 const watchedPairsTableContainerEl = document.getElementById('watched-pairs-table-container');
 const watchedPairsToggleIconEl = document.getElementById('watched-pairs-toggle-icon');
@@ -141,7 +134,7 @@ const filterFundingMinInput = document.getElementById('filter-funding-min');
 const filterFundingMaxInput = document.getElementById('filter-funding-max');
 
 let uiUpdateScheduled = false;
-const UI_UPDATE_INTERVAL_MS = 50;
+const UI_UPDATE_INTERVAL_MS = 200;
 let ws = null;
 
 function escapeHTML(str) {
@@ -207,69 +200,22 @@ function abrirJanelaDeGrafico(url, windowName, position) {
     if (newWindow) newWindow.focus();
 }
 
-// --- ALTERAÇÃO INICIA AQUI (2/3): Funções de abrir e transmitir para a calculadora ---
 function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false) {
-    const windowName = `calc_${pair}_${direction}`;
-    
-    // Se a janela já existe, apenas a foca
-    if (openCalculators.has(windowName) && !openCalculators.get(windowName).closed) {
-        openCalculators.get(windowName).focus();
-        return;
-    }
-
     const url = `realtime_profit_calc.html?pair=${encodeURIComponent(pair)}&direction=${encodeURIComponent(direction)}&buyEx=${encodeURIComponent(buyEx)}&sellEx=${encodeURIComponent(sellEx)}`;
+    const windowName = forceNewWindow ? '_blank' : 'arbitrage_calculator_window';
     const popWidth = 420;
     const popHeight = 220;
     const left = (window.screen.availWidth / 2) - (popWidth / 2);
     const top = (window.screen.availHeight / 2) - (popHeight / 2);
     const features = `width=${popWidth},height=${popHeight},top=${top},left=${left},resizable=yes,scrollbars=yes`;
-    
     const calcWindow = window.open(url, windowName, features);
-    
     if (calcWindow) {
-        openCalculators.set(windowName, calcWindow);
-        // Remove da lista quando a janela for fechada
-        const closeCheckInterval = setInterval(() => {
-            if (calcWindow.closed) {
-                openCalculators.delete(windowName);
-                clearInterval(closeCheckInterval);
-            }
-        }, 1000);
+        calcWindow.focus();
     }
 }
 
-// Nova função para enviar os dados para as calculadoras
-function broadcastToCalculators() {
-    if (openCalculators.size === 0) return;
-
-    openCalculators.forEach((calcWindow, windowName) => {
-        if (calcWindow.closed) {
-            openCalculators.delete(windowName);
-            return;
-        }
-
-        const nameParts = windowName.split('_');
-        const pair = nameParts[1];
-        // Recria a 'direction' completa, que pode conter '_'
-        const direction = nameParts.slice(2).join('_'); 
-        
-        const relevantOp = state.arbitrageOpportunities.find(opw => opw.data.pair === pair && opw.data.direction === direction);
-
-        if (relevantOp) {
-            const lucroS = calculateLucroS(relevantOp.data, state.allPairsData, state.config);
-            const payload = {
-                type: 'update',
-                opportunity: relevantOp.data,
-                lucroS: lucroS
-            };
-            calcWindow.postMessage(payload, window.location.origin);
-        }
-    });
-}
-// --- ALTERAÇÃO TERMINA AQUI (2/3) ---
-
-
 function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
+    // 1. Parse dos dados da oportunidade
     let opDataToUse = null;
     if (typeof opDataForCopyStr === 'string' && opDataForCopyStr) {
         try {
@@ -279,6 +225,7 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
+    // 2. Calcular e copiar o valor primeiro, enquanto a página principal tem foco
     if (opDataToUse && opDataToUse.buyPrice && state.defaultCapitalUSD > 0) {
         const buyPrice = parseFloat(opDataToUse.buyPrice);
         if (buyPrice > 0) {
@@ -290,6 +237,7 @@ function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellIn
         }
     }
 
+    // 3. Abrir todas as janelas o mais rápido possível, sem pausas
     abrirCalculadora(pair, direction, buyExchange, sellExchange);
 
     let urlLeg1 = getExchangeUrl(buyExchange, buyInstrument, pair);
@@ -348,9 +296,26 @@ function updateMainTitle() {
     if (elements.viewSubtitle) elements.viewSubtitle.textContent = viewSubtitles[state.currentView];
 }
 
+function toggleBlockedOps() {
+  state.showBlockedOps = !state.showBlockedOps;
+  const text = elements.toggleBlockedOps?.querySelector('span');
+  const blockedTableContainer = document.getElementById('blocked-ops-table-container');
+  if (state.showBlockedOps) {
+    elements.eyeIcon.style.display = 'block';
+    elements.eyeOffIcon.style.display = 'none';
+    text.textContent = 'Esconder Oportunidades Bloqueadas';
+    blockedTableContainer.style.display = '';
+  } else {
+    elements.eyeIcon.style.display = 'none';
+    elements.eyeOffIcon.style.display = 'block';
+    text.textContent = 'Mostrar Oportunidades Bloqueadas';
+    blockedTableContainer.style.display = 'none';
+  }
+}
+
 function getFilteredOpportunities() {
     let opportunities = state.arbitrageOpportunities.filter(opWrapper => {
-        const op = opWrapper.data;
+        const op = opWrapper.data; // Corrigido: acessando op.data
         if (state.watchedPairsList.includes(op.pair)) return false;
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
 
@@ -554,6 +519,7 @@ function saveBlockedOps() {
   localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(state.blockedOps));
 }
 
+// --- Funções para gerenciar combinações ocultas no localStorage ---
 function loadHiddenWatchedOps() {
     const stored = localStorage.getItem(HIDDEN_WATCHED_OPS_STORAGE_KEY);
     state.hiddenWatchedOps = stored ? new Set(JSON.parse(stored)) : new Set();
@@ -580,7 +546,11 @@ async function loadWatchedPairs() {
     const response = await fetch('/api/users/settings');
     if (response.ok) {
         const settings = await response.json();
-                    state.watchedPairsList = settings.watchedPairs || [];
+        state.watchedPairsList = settings.watchedPairs || [];
+        if (watchedPairsCountEl) {
+            watchedPairsCountEl.textContent = state.watchedPairsList.length;
+        }
+        requestUiUpdate();
     } else {
         console.error("Não foi possível carregar os pares vigiados do servidor.");
         state.watchedPairsList = [];
@@ -621,12 +591,14 @@ function addWatchedPair() {
   }
 }
 
+// Nova função para remover um par vigiado completamente
 async function removeWatchedPair(pairToRemove) {
     if (confirm(`Tem certeza que deseja remover o par ${pairToRemove} da sua lista de pares vigiados?`)) {
         state.watchedPairsList = state.watchedPairsList.filter(pair => pair !== pairToRemove);
+        // Remover também as combinações ocultas relacionadas a este par
         state.hiddenWatchedOps = new Set(Array.from(state.hiddenWatchedOps).filter(opKey => !opKey.startsWith(`${pairToRemove}|`)));
         saveHiddenWatchedOps();
-        await saveWatchedPairs();
+        await saveWatchedPairs(); // Salva a lista atualizada no servidor
         requestUiUpdate();
     }
 }
@@ -678,14 +650,13 @@ function requestUiUpdate() {
 
 function updateAllUI() {
   uiUpdateScheduled = false;
-  if(state.isPaused) return;
   updateGlobalUIState();
   renderPairsTable();
   renderOpportunitiesTable();
   renderBlockedOpportunitiesTable();
   renderWatchedPairsTable();
   updateMainTitle();
-  updateWatchedPairsCount();
+  updateWatchedPairsCount(); // Atualiza o contador de pares vigiados
 }
 
 function updateGlobalUIState() {
@@ -733,6 +704,7 @@ function updateGlobalUIState() {
     }
 }
 
+
 function formatTimestamp(timestamp) {
   if (!timestamp) return '-';
   return new Date(timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -755,24 +727,14 @@ function formatRatioAsProfitPercentage(ratioDecimal) {
 }
 
 function formatTimeAgo(timestamp) {
-    if (!timestamp) return "N/A";
-    const diff = Date.now() - timestamp;
-    const totalSeconds = Math.floor(diff / 1000);
-
-    if (totalSeconds < 60) {
-        return `${totalSeconds}s`;
-    }
-
-    const totalMinutes = Math.floor(totalSeconds / 60);
-    const remainingSeconds = totalSeconds % 60;
-
-    if (totalMinutes < 60) {
-        return `${totalMinutes}m ${remainingSeconds}s`;
-    }
-
-    const hours = Math.floor(totalMinutes / 60);
-    const remainingMinutes = totalMinutes % 60;
-    return `${hours}h ${remainingMinutes}m`;
+  if (!timestamp) return "N/A";
+  const diff = Date.now() - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
 }
 
 function getCurrencyIcon(pair) {
@@ -830,7 +792,7 @@ function calculateLucroS(op, allMarketData, config) {
     feeForBuyExit = parseFloat(configBuyExit.spotMakerFee);
   } else {
     priceToBuyForExit = marketDataForBuyExit.futuresPrice;
-    feeForBuyExit = parseFloat(configBuyExit.spotMakerFee);
+    feeForBuyExit = parseFloat(configBuyExit.futuresMakerFee);
   }
   if (typeof priceToBuyForExit !=='number' || isNaN(priceToBuyForExit) || priceToBuyForExit <= 0 || typeof priceToSellForExit !=='number' || isNaN(priceToSellForExit) || isNaN(feeForBuyExit) || isNaN(feeForSellExit)) return null;
   const grossSpreadExitDecimal = (priceToSellForExit / priceToBuyForExit) - 1;
@@ -879,13 +841,14 @@ function renderWatchedPairsTable() {
     let tableHtml = "";
     let combinationsFound = 0;
 
+    // Agrupar oportunidades por par para renderizar o cabeçalho do par uma vez
     const opportunitiesByPair = state.watchedPairsList.reduce((acc, pair) => {
         acc[pair] = state.arbitrageOpportunities.filter(opWrapper => {
             const op = opWrapper.data;
             if (op.pair !== pair) return false;
 
-            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
-            if (state.hiddenWatchedOps.has(opKey)) {
+            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; // Chave mais específica
+            if (state.hiddenWatchedOps.has(opKey)) { // Usar o Set de hiddenWatchedOps
                 return false;
             }
 
@@ -924,6 +887,7 @@ function renderWatchedPairsTable() {
             combinationsFound += opportunitiesForPair.length;
             const escapedPair = escapeHTML(pair);
 
+            // Adicionar o cabeçalho do par com o novo botão 'Remover Par'
             tableHtml += `
                 <tr class="watched-pair-header-row">
                     <td colspan="8">
@@ -941,7 +905,7 @@ function renderWatchedPairsTable() {
                 const lucroS_percent = calculateLucroS(op, state.allPairsData, state.config);
                 const lucroEClass = lucroE_percent >= 0 ? 'profit-positive' : 'profit-negative';
                 const lucroSClass = lucroS_percent === null ? 'profit-zero' : (lucroS_percent >= 0 ? 'profit-positive' : 'profit-negative');
-                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
+                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`; // Chave mais específica
 
                 let volumeDisplay, fundingRateDisplay, fundingRateClass = 'profit-zero';
                  if (op.type === "INTER_EXCHANGE_FUT_FUT") {
@@ -961,7 +925,7 @@ function renderWatchedPairsTable() {
                     fundingRateClass = (op.fundingRate || 0) >= 0 ? 'profit-positive' : 'profit-negative';
                 }
 
-                const timeAgo = formatTimeAgo(opWrapper.firstSeen);
+                const timeAgo = formatTimeAgo(op.timestamp);
 
                 tableHtml += `
                     <tr>
@@ -990,6 +954,7 @@ function renderWatchedPairsTable() {
 
     watchedPairsTableBodyEl.innerHTML = tableHtml;
 
+    // Adicionar event listeners para os botões de ocultar
     document.querySelectorAll('.hide-watched-op-button').forEach(button => {
         button.addEventListener('click', function() {
             const keyToHide = this.dataset.opKey;
@@ -997,6 +962,7 @@ function renderWatchedPairsTable() {
         });
     });
 
+    // Adicionar event listeners para os novos botões de remover par
     document.querySelectorAll('.remove-pair-button').forEach(button => {
         button.addEventListener('click', function() {
             const pairToRemove = this.dataset.pair;
@@ -1143,10 +1109,13 @@ function renderOpportunitiesTable() {
         const escapedOpKey = escapeHTML(opKey);
 
         const escapedOpDataForCopy = JSON.stringify(op).replace(/"/g, '&quot;');
-        
+        const openAllClickHandler = `abrirGraficosComLayout('${escapedBuyEx}', '${escapedBuyInst}', '${escapedSellEx}', '${escapedSellInst}', '${escapedPair}', '${escapedDirection}', '${escapedOpDataForCopy}')`;
+
         const openAllIcon = `<svg class="open-exchange-icon" data-buy-ex="${escapedBuyEx}" data-buy-inst="${escapedBuyInst}" data-sell-ex="${escapedSellEx}" data-sell-inst="${escapedSellInst}" data-pair="${escapedPair}" data-direction="${escapedDirection}" data-op-data="${escapedOpDataForCopy}" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" title="Abrir gráficos, calculadora E copiar qtd. sugerida"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`;
+
         const compraLink = `<a href="#" class="exchange-link" data-exchange="${escapedBuyEx}" data-instrument="${escapedBuyInst}" data-pair="${escapedPair}">${getExchangeTag(op.buyExchange)} ${op.buyInstrument}<span>${formatPrice(op.buyPrice)}</span></a>`;
         const vendaLink = `<a href="#" class="exchange-link" data-exchange="${escapedSellEx}" data-instrument="${escapedSellInst}" data-pair="${escapedPair}">${getExchangeTag(op.sellExchange)} ${op.sellInstrument}<span>${formatPrice(op.sellPrice)}</span></a>`;
+
         const calculatorIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="calculator-icon" data-pair="${escapedPair}" data-direction="${escapedDirection}" data-buy-ex="${escapedBuyEx}" data-sell-ex="${escapedSellEx}" title="Abrir Calculadora Detalhada em nova janela"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="16" y1="10" x2="16" y2="10"></line><line x1="12" y1="10" x2="12" y2="10"></line><line x1="8" y1="10" x2="8" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="8" y1="14" x2="8" y2="18"></line></svg>`;
 
         tableHtml += `<tr>
@@ -1265,15 +1234,6 @@ function toggleMonitorPares() {
   }
 }
 
-function toggleBlockedOpsSection() {
-  state.isBlockedOpsExpanded = !state.isBlockedOpsExpanded;
-  if (blockedOpsTableContainerEl && blockedOpsToggleIconEl) {
-    blockedOpsTableContainerEl.style.display = state.isBlockedOpsExpanded ? '' : 'none';
-    blockedOpsToggleIconEl.innerHTML = state.isBlockedOpsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
-    localStorage.setItem(BLOCKED_OPS_EXPANDED_KEY, state.isBlockedOpsExpanded);
-  }
-}
-
 function setupLogoutButton() {
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) {
@@ -1288,34 +1248,6 @@ function setupLogoutButton() {
             }
         });
     }
-}
-
-function cleanupStaleOpportunities() {
-    const now = Date.now();
-    const originalCount = state.arbitrageOpportunities.length;
-
-    state.arbitrageOpportunities = state.arbitrageOpportunities.filter(opWrapper => {
-        return (now - opWrapper.lastUpdated) < OPPORTUNITY_TTL_MS;
-    });
-
-    if (originalCount > state.arbitrageOpportunities.length) {
-        requestUiUpdate();
-    }
-}
-
-function fetchConfigAndUpdateUI() {
-  fetch(`${window.location.origin}/api/config`)
-    .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP error ${res.status}`)))
-    .then(configData => {
-      Object.assign(state.config.exchanges.mexc, configData.exchanges?.mexc);
-      Object.assign(state.config.exchanges.gateio, configData.exchanges?.gateio);
-      Object.assign(state.config.arbitrage, configData.arbitrage);
-      state.config.monitoredPairs = configData.monitoredPairs || [];
-      if (filterEnableFutFutEl) filterEnableFutFutEl.checked = state.config.arbitrage.enableFuturesVsFutures;
-      if (filterEnableSpotSpotEl) filterEnableSpotSpotEl.checked = state.config.arbitrage.enableSpotVsSpot;
-      requestUiUpdate();
-    })
-    .catch(err => console.error("FRONTEND: Erro config API:", err));
 }
 
 function connectWebSocket() {
@@ -1358,51 +1290,22 @@ function connectWebSocket() {
         const message = JSON.parse(event.data);
         state.lastUpdated = new Date();
         let UINeedsUpdate = false;
-        const now = Date.now();
-
         if (message.type === "opportunity") {
             const opportunityData = message.data;
             const existingIndex = state.arbitrageOpportunities.findIndex(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
-            
             if (existingIndex > -1) {
                 state.arbitrageOpportunities[existingIndex].data = opportunityData;
-                state.arbitrageOpportunities[existingIndex].lastUpdated = now;
             } else {
-                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: opportunityData.timestamp, lastUpdated: now });
+                state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: Date.now() });
             }
             UINeedsUpdate = true;
-
         } else if (message.type === "opportunities") {
-            const oldOpsMap = new Map(state.arbitrageOpportunities.map(opW => [
-                `${opW.data.pair}-${opW.data.direction}`,
-                opW
-            ]));
-
-            const newOpportunities = (message.data || []).map(newOpData => {
-                const key = `${newOpData.pair}-${newOpData.direction}`;
-                const existingOp = oldOpsMap.get(key);
-
-                if (existingOp) {
-                    return { data: newOpData, firstSeen: existingOp.firstSeen || newOpData.timestamp, lastUpdated: now };
-                } else {
-                    return { data: newOpData, firstSeen: newOpData.timestamp, lastUpdated: now };
-                }
-            });
-
-            state.arbitrageOpportunities = newOpportunities;
-            UINeedsUpdate = true;
-
+            state.arbitrageOpportunities = (message.data || []).map(d => ({data:d, firstSeen: Date.now()}));
         } else if (message.type === "all_pairs_update") {
             state.allPairsData = message.data || [];
             UINeedsUpdate = true;
         }
-
-        if (UINeedsUpdate) {
-            requestUiUpdate();
-            broadcastToCalculators(); // CHAME AQUI PARA ATUALIZAR CALCULADORAS IMEDIATAMENTE
-
-
-        }
+        if (UINeedsUpdate) requestUiUpdate();
     } catch (error) {
         console.error("FRONTEND: Erro WebSocket:", error);
     }
@@ -1422,6 +1325,21 @@ function connectWebSocket() {
   };
 }
 
+function fetchConfigAndUpdateUI() {
+  fetch(`${window.location.origin}/api/config`)
+    .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP error ${res.status}`)))
+    .then(configData => {
+      Object.assign(state.config.exchanges.mexc, configData.exchanges?.mexc);
+      Object.assign(state.config.exchanges.gateio, configData.exchanges?.gateio);
+      Object.assign(state.config.arbitrage, configData.arbitrage);
+      state.config.monitoredPairs = configData.monitoredPairs || [];
+      if (filterEnableFutFutEl) filterEnableFutFutEl.checked = state.config.arbitrage.enableFuturesVsFutures;
+      if (filterEnableSpotSpotEl) filterEnableSpotSpotEl.checked = state.config.arbitrage.enableSpotVsSpot;
+      requestUiUpdate();
+    })
+    .catch(err => console.error("FRONTEND: Erro config API:", err));
+}
+
 function setupEventListeners() {
   if (elements.sidebarToggle) elements.sidebarToggle.addEventListener('click', toggleSidebar);
   if (elements.navArbitragens) elements.navArbitragens.addEventListener('click', () => setCurrentView('arbitragens'));
@@ -1429,7 +1347,8 @@ function setupEventListeners() {
   if (elements.navAmbosPositivos) elements.navAmbosPositivos.addEventListener('click', () => setCurrentView('ambos-positivos'));
   if (elements.toggleSoundButton) elements.toggleSoundButton.addEventListener('click', toggleSound);
   if (elements.themeToggleButton) elements.themeToggleButton.addEventListener('click', toggleTheme);
-  if (elements.togglePauseButton) elements.togglePauseButton.addEventListener('click', () => { state.isPaused = !state.isPaused; updatePauseButton(); if(!state.isPaused) requestUiUpdate(); });
+  if (elements.togglePauseButton) elements.togglePauseButton.addEventListener('click', () => { state.isPaused = !state.isPaused; updatePauseButton(); });
+  if (elements.toggleBlockedOps) elements.toggleBlockedOps.addEventListener('click', toggleBlockedOps);
 
   Object.entries(filterCheckboxes).forEach(([key, checkbox]) => { if (checkbox) checkbox.addEventListener('change', (e) => { state.filters[e.target.dataset.filterkey] = e.target.checked; requestUiUpdate(); }); });
 
@@ -1437,8 +1356,20 @@ function setupEventListeners() {
   if (filterMinProfitEDisplayEl) filterMinProfitEDisplayEl.addEventListener('change', (e) => { state.filters.minProfitEFilterDisplay = Number(e.target.value); requestUiUpdate(); });
   if (filterMinProfitSDisplayEl) filterMinProfitSDisplayEl.addEventListener('change', (e) => { state.filters.minProfitSFilterDisplay = Number(e.target.value); requestUiUpdate(); });
 
-  if (filterFundingMinInput) filterFundingMinInput.addEventListener('input', (e) => { const value = e.target.value; state.filters.minFundingRate = value === '' ? null : parseFloat(value); requestUiUpdate(); });
-  if (filterFundingMaxInput) filterFundingMaxInput.addEventListener('input', (e) => { const value = e.target.value; state.filters.maxFundingRate = value === '' ? null : parseFloat(value); requestUiUpdate(); });
+  if (filterFundingMinInput) {
+      filterFundingMinInput.addEventListener('input', (e) => {
+          const value = e.target.value;
+          state.filters.minFundingRate = value === '' ? null : parseFloat(value);
+          requestUiUpdate();
+      });
+  }
+  if (filterFundingMaxInput) {
+      filterFundingMaxInput.addEventListener('input', (e) => {
+          const value = e.target.value;
+          state.filters.maxFundingRate = value === '' ? null : parseFloat(value);
+          requestUiUpdate();
+      });
+  }
 
   if (filterEnableFutFutEl) {
       filterEnableFutFutEl.addEventListener('change', (e) => {
@@ -1462,7 +1393,6 @@ function setupEventListeners() {
 
   if (watchedPairsHeaderEl) watchedPairsHeaderEl.addEventListener('click', toggleWatchedPairs);
   if (monitorParesHeaderEl) monitorParesHeaderEl.addEventListener('click', toggleMonitorPares);
-  if (blockedOpsHeaderEl) blockedOpsHeaderEl.addEventListener('click', toggleBlockedOpsSection);
 
   if (defaultCapitalInputEl) {
       defaultCapitalInputEl.addEventListener('input', () => {
@@ -1476,96 +1406,14 @@ function setupEventListeners() {
       console.error("ERRO CRÍTICO: O campo de input com o ID 'default-capital-input' não foi encontrado no HTML.");
   }
 
+
   if (soundProfitThresholdInputEl) soundProfitThresholdInputEl.addEventListener('input', () => { state.soundProfitThreshold = parseFloat(soundProfitThresholdInputEl.value) || 0; });
-  
-    document.addEventListener('click', function(e) {
-        if (e.target.closest('.sortable')) {
-            const sortableElement = e.target.closest('.sortable');
-            const sortColumn = sortableElement.getAttribute('data-sort');
-            if (sortColumn) sortByColumn(sortColumn);
-        }
-        if (e.target.classList.contains('copy-btn')) {
-            const copyValue = e.target.getAttribute('data-copy-value');
-            if (copyValue) copiarParaClipboard(copyValue, e.target);
-        }
-        if (e.target.closest('.open-exchange-icon')) {
-            const icon = e.target.closest('.open-exchange-icon');
-            const opData = {
-                buyEx: icon.getAttribute('data-buy-ex'),
-                buyInst: icon.getAttribute('data-buy-inst'),
-                sellEx: icon.getAttribute('data-sell-ex'),
-                sellInst: icon.getAttribute('data-sell-inst'),
-                pair: icon.getAttribute('data-pair'),
-                direction: icon.getAttribute('data-direction'),
-                opDataStr: icon.getAttribute('data-op-data')
-            };
-            if (Object.values(opData).every(val => val)) {
-                abrirGraficosComLayout(opData.buyEx, opData.buyInst, opData.sellEx, opData.sellInst, opData.pair, opData.direction, opData.opDataStr);
-            }
-        }
-        if (e.target.closest('.exchange-link')) {
-            e.preventDefault();
-            const link = e.target.closest('.exchange-link');
-            const exchange = link.getAttribute('data-exchange');
-            const instrument = link.getAttribute('data-instrument');
-            const pair = link.getAttribute('data-pair');
-            if (exchange && instrument && pair) {
-                const url = getExchangeUrl(exchange, instrument, pair);
-                if (url) window.open(url, '_blank');
-            }
-        }
-        if (e.target.closest('.calculator-icon')) {
-            const icon = e.target.closest('.calculator-icon');
-            const data = {
-                pair: icon.getAttribute('data-pair'),
-                direction: icon.getAttribute('data-direction'),
-                buyEx: icon.getAttribute('data-buy-ex'),
-                sellEx: icon.getAttribute('data-sell-ex')
-            };
-            if (Object.values(data).every(val => val)) {
-                abrirCalculadora(data.pair, data.direction, data.buyEx, data.sellEx, true);
-            }
-        }
-        if (e.target.classList.contains('favorite-star')) {
-            const opKey = e.target.getAttribute('data-op-key');
-            if (opKey) toggleFavorite(opKey);
-        }
-        if (e.target.classList.contains('block-icon')) {
-            const opKey = e.target.getAttribute('data-op-key');
-            const opData = e.target.getAttribute('data-op-data');
-            if (opKey && opData) toggleBlock(opKey, opData);
-        }
-        if (e.target.classList.contains('rehab-button')) {
-            const opKey = e.target.getAttribute('data-op-key');
-            if (opKey) unblockOpportunity(opKey);
-        }
-    });
-}
-
-function initializePanelStates() {
-    state.isWatchedPairsExpanded = localStorage.getItem(WATCHED_PAIRS_EXPANDED_KEY) === 'true';
-    if(watchedPairsTableContainerEl && watchedPairsToggleIconEl) {
-        watchedPairsTableContainerEl.style.display = state.isWatchedPairsExpanded ? '' : 'none';
-        watchedPairsToggleIconEl.innerHTML = state.isWatchedPairsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
-    }
-
-    state.isMonitorParesExpanded = localStorage.getItem(MONITOR_PARES_EXPANDED_KEY) === 'true';
-    if(monitorParesTableContainerEl && monitorParesToggleIconEl) {
-        monitorParesTableContainerEl.style.display = state.isMonitorParesExpanded ? '' : 'none';
-        monitorParesToggleIconEl.innerHTML = state.isMonitorParesExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
-    }
-
-    state.isBlockedOpsExpanded = localStorage.getItem(BLOCKED_OPS_EXPANDED_KEY) === 'true';
-    if(blockedOpsTableContainerEl && blockedOpsToggleIconEl) {
-        blockedOpsTableContainerEl.style.display = state.isBlockedOpsExpanded ? '' : 'none';
-        blockedOpsToggleIconEl.innerHTML = state.isBlockedOpsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
-    }
 }
 
 function init() {
   loadFavorites();
   loadBlockedOps();
-  loadHiddenWatchedOps();
+  loadHiddenWatchedOps(); // Carregar combinações ocultas
   loadWatchedPairs();
   applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
 
@@ -1573,21 +1421,33 @@ function init() {
   state.defaultCapitalUSD = savedCapital ? parseFloat(savedCapital) : 0;
   if (defaultCapitalInputEl) defaultCapitalInputEl.value = state.defaultCapitalUSD > 0 ? state.defaultCapitalUSD : '';
 
+  state.isWatchedPairsExpanded = localStorage.getItem(WATCHED_PAIRS_EXPANDED_KEY) === 'true';
+  if (watchedPairsTableContainerEl && watchedPairsToggleIconEl) {
+    watchedPairsTableContainerEl.style.display = state.isWatchedPairsExpanded ? '' : 'none';
+    watchedPairsToggleIconEl.innerHTML = state.isWatchedPairsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+  }
+
+  state.isMonitorParesExpanded = localStorage.getItem(MONITOR_PARES_EXPANDED_KEY) === 'true';
+  if (monitorParesTableContainerEl && monitorParesToggleIconEl) {
+    monitorParesTableContainerEl.style.display = state.isMonitorParesExpanded ? '' : 'none';
+    monitorParesToggleIconEl.innerHTML = state.isMonitorParesExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+  }
+
   if (soundProfitThresholdInputEl) soundProfitThresholdInputEl.value = state.soundProfitThreshold;
 
-  initializePanelStates();
   setupEventListeners();
   setupLogoutButton();
   setCurrentView('arbitragens');
   fetchConfigAndUpdateUI();
   updateAllUI();
-  connectWebSocket();
 
-  setInterval(cleanupStaleOpportunities, OPPORTUNITY_TTL_MS / 2);
+  connectWebSocket();
 }
 
-document.addEventListener('DOMContentLoaded', init);
-
+window.openExchangeTradingPage = (exchange, instrument, pair) => {
+    const url = getExchangeUrl(exchange, instrument, pair);
+    if (url) window.open(url, '_blank');
+};
 window.toggleFavorite = toggleFavorite;
 window.toggleBlock = toggleBlock;
 window.unblockOpportunity = unblockOpportunity;
@@ -1595,7 +1455,11 @@ window.sortByColumn = sortByColumn;
 window.copiarParaClipboard = copiarParaClipboard;
 window.abrirGraficosComLayout = abrirGraficosComLayout;
 window.abrirCalculadora = abrirCalculadora;
-window.removeWatchedPair = removeWatchedPair;
+window.removeWatchedPair = removeWatchedPair; // Expor a nova função
+
+document.addEventListener('DOMContentLoaded', init);
+
+
 
 function renderUpgradeMessage() {
     const footerInfo = document.getElementById("footer-info");
@@ -1604,17 +1468,25 @@ function renderUpgradeMessage() {
     if (state.currentUserSubscriptionStatus === 'free') {
         if (testVersionBanner) {
             testVersionBanner.style.display = 'flex';
+
             const upgradeButton = testVersionBanner.querySelector('.banner-upgrade-button');
             const closeButton = testVersionBanner.querySelector('.banner-close');
+
             if (upgradeButton && !upgradeButton.hasAttribute('data-listener-added')) {
-                upgradeButton.addEventListener('click', () => window.open('https://arbflash.com/', '_blank'));
+                upgradeButton.addEventListener('click', () => {
+                    window.open('https://arbflash.com/', '_blank');
+                });
                 upgradeButton.setAttribute('data-listener-added', 'true');
             }
+
             if (closeButton && !closeButton.hasAttribute('data-listener-added')) {
-                closeButton.addEventListener('click', () => testVersionBanner.style.display = 'none');
+                closeButton.addEventListener('click', () => {
+                    testVersionBanner.style.display = 'none';
+                });
                 closeButton.setAttribute('data-listener-added', 'true');
             }
         }
+
         if (footerInfo && !document.getElementById('test-version-message')) {
             const testVersionMessage = document.createElement('span');
             testVersionMessage.id = 'test-version-message';
@@ -1623,13 +1495,20 @@ function renderUpgradeMessage() {
             footerInfo.appendChild(testVersionMessage);
         }
     } else {
-        if (testVersionBanner) testVersionBanner.style.display = 'none';
-        if (document.getElementById('test-version-message')) document.getElementById('test-version-message').remove();
+        if (testVersionBanner) {
+            testVersionBanner.style.display = 'none';
+        }
+
+        if (document.getElementById('test-version-message')) {
+            document.getElementById('test-version-message').remove();
+        }
     }
 }
 
 function showUpgradeAlert() {
-    document.querySelectorAll('.premium-notification').forEach(n => n.remove());
+    const existingNotifications = document.querySelectorAll('.premium-notification');
+    existingNotifications.forEach(notification => notification.remove());
+
     const notificationId = 'premium-notification-' + Date.now();
     const notificationHtml = `
         <div id="${notificationId}" class="premium-notification">
@@ -1642,65 +1521,331 @@ function showUpgradeAlert() {
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', notificationHtml);
+
     const notification = document.getElementById(notificationId);
-    notification.querySelector('.subscribe-button-inline').addEventListener('click', () => window.open('https://arbflash.com/', '_blank'));
-    notification.querySelector('.close-notification').addEventListener('click', () => notification.remove());
-    setTimeout(() => notification.classList.add('show'), 10);
+    const subscribeButton = notification.querySelector('.subscribe-button-inline');
+    const closeButton = notification.querySelector('.close-notification');
+
+    subscribeButton.addEventListener('click', () => {
+        window.open('https://arbflash.com/', '_blank');
+    });
+
+    closeButton.addEventListener('click', () => {
+        notification.remove();
+    });
+
     setTimeout(() => {
         if (notification) {
+            notification.classList.add('show');
+        }
+    }, 10);
+
+    setTimeout(() => {
+        if (notification && document.body.contains(notification)) {
             notification.classList.remove('show');
-            notification.addEventListener('transitionend', () => notification.remove());
+            notification.addEventListener('transitionend', () => {
+                if (document.body.contains(notification)) {
+                    notification.remove();
+                }
+            });
         }
     }, 5000);
 }
 
 function applyFreemiumRestrictions() {
     const lockIconHtml = ' <span class="lock-icon">🔒</span>';
+
     const premiumFeatures = [
-        { element: elements.navSaidaOp, handler: () => setCurrentView("saida-op"), isNav: true, hoverCardTitle: "Recurso Premium", hoverCardText: "Acesse a visualização de saída de operações com a versão premium." },
-        { element: elements.navAmbosPositivos, handler: () => setCurrentView("ambos-positivos"), isNav: true, hoverCardTitle: "Recurso Premium", hoverCardText: "Visualize operações com ambos os lucros positivos na versão premium." },
-        { element: filterMinVolumeInput, isInput: true, parentSelector: ".filter-group", hoverCardTitle: "Filtro Premium", hoverCardText: "Configure filtros de volume mínimo na versão premium." },
-        { element: filterFundingMinInput, isInput: true, parentSelector: ".filter-group", hoverCardTitle: "Filtro Premium", hoverCardText: "Configure filtros de funding rate na versão premium." },
-        { element: filterFundingMaxInput, isInput: true, parentSelector: ".filter-group", hoverCardTitle: "Filtro Premium", hoverCardText: "Configure filtros de funding rate na versão premium." },
-        { element: filterEnableFutFutEl, isInput: true, parentSelector: ".filter-group", hoverCardTitle: "Estratégia Premium", hoverCardText: "Ative arbitragem Futuros vs Futuros na versão premium." },
-        { element: filterEnableSpotSpotEl, isInput: true, parentSelector: ".filter-group", hoverCardTitle: "Estratégia Premium", hoverCardText: "Ative arbitragem Spot vs Spot na versão premium." }
+        {
+            element: elements.navSaidaOp,
+            event: 'click',
+            handler: () => setCurrentView("saida-op"),
+            isNav: true,
+            tooltipText: "Premium",
+            hoverCardTitle: "Recurso Premium",
+            hoverCardText: "Acesse a visualização de saída de operações com a versão premium."
+        },
+        {
+            element: elements.navAmbosPositivos,
+            event: 'click',
+            handler: () => setCurrentView("ambos-positivos"),
+            isNav: true,
+            tooltipText: "Premium",
+            hoverCardTitle: "Recurso Premium",
+            hoverCardText: "Visualize operações com ambos os lucros positivos na versão premium."
+        },
+        {
+            element: filterMinVolumeInput,
+            event: 'input',
+            handler: (e) => { state.filters.minVolume = Number(e.target.value); requestUiUpdate(); },
+            isInput: true,
+            parentSelector: ".filter-group",
+            tooltipText: "Premium",
+            hoverCardTitle: "Filtro Premium",
+            hoverCardText: "Configure filtros de volume mínimo na versão premium."
+        },
+        {
+            element: filterFundingMinInput,
+            event: 'input',
+            handler: (e) => { const value = e.target.value; state.filters.minFundingRate = value === "" ? null : parseFloat(value); requestUiUpdate(); },
+            isInput: true,
+            parentSelector: ".filter-group",
+            tooltipText: "Premium",
+            hoverCardTitle: "Filtro Premium",
+            hoverCardText: "Configure filtros de funding rate na versão premium."
+        },
+        {
+            element: filterFundingMaxInput,
+            event: 'input',
+            handler: (e) => { const value = e.target.value; state.filters.maxFundingRate = value === "" ? null : parseFloat(value); requestUiUpdate(); },
+            isInput: true,
+            parentSelector: ".filter-group",
+            tooltipText: "Premium",
+            hoverCardTitle: "Filtro Premium",
+            hoverCardText: "Configure filtros de funding rate na versão premium."
+        },
+        {
+            element: filterEnableFutFutEl,
+            event: 'change',
+            handler: (e) => { state.config.arbitrage.enableFuturesVsFutures = e.target.checked; requestUiUpdate(); fetch("/api/config/arbitrage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enableFuturesVsFutures: e.target.checked }) }).catch(() => alert("Erro ao atualizar config no backend.")); },
+            isInput: true,
+            parentSelector: ".filter-group",
+            tooltipText: "Premium",
+            hoverCardTitle: "Estratégia Premium",
+            hoverCardText: "Ative arbitragem Futuros vs Futuros na versão premium."
+        },
+        {
+            element: filterEnableSpotSpotEl,
+            event: 'change',
+            handler: (e) => { state.config.arbitrage.enableSpotVsSpot = e.target.checked; requestUiUpdate(); fetch("/api/config/arbitrage/spot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enableSpotVsSpot: e.target.checked }) }).catch(() => alert("Erro ao atualizar config no backend.")); },
+            isInput: true,
+            parentSelector: ".filter-group",
+            tooltipText: "Premium",
+            hoverCardTitle: "Estratégia Premium",
+            hoverCardText: "Ative arbitragem Spot vs Spot na versão premium."
+        }
     ];
 
     premiumFeatures.forEach(feature => {
         if (!feature.element) return;
+
         const targetElement = feature.parentSelector ? feature.element.closest(feature.parentSelector) : feature.element;
         const labelElement = feature.isInput ? targetElement.querySelector("label") : feature.element;
 
-        const newElement = feature.element.cloneNode(true);
-        feature.element.parentNode.replaceChild(newElement, feature.element);
-        feature.element = newElement;
-
         if (state.currentUserSubscriptionStatus === 'free') {
             targetElement.classList.add("premium-locked");
-            if (!targetElement.querySelector('.premium-hover-card')) {
-                const hoverCard = document.createElement('div');
-                hoverCard.className = 'premium-hover-card';
-                hoverCard.innerHTML = `<h4>${feature.hoverCardTitle}</h4><p>${feature.hoverCardText}</p><button class="upgrade-btn">Adquirir Premium</button>`;
-                targetElement.appendChild(hoverCard);
-                hoverCard.querySelector('.upgrade-btn').addEventListener('click', (e) => { e.stopPropagation(); window.open('https://arbflash.com/', '_blank'); });
-            }
+
+            const existingHoverCard = targetElement.querySelector('.premium-hover-card');
+            if (existingHoverCard) existingHoverCard.remove();
+
+            const hoverCard = document.createElement('div');
+            hoverCard.className = 'premium-hover-card';
+            hoverCard.style.top = '100%';
+            hoverCard.style.left = '0';
+            hoverCard.style.marginTop = '8px';
+            hoverCard.innerHTML = `
+                <h4>${feature.hoverCardTitle}</h4>
+                <p>${feature.hoverCardText}</p>
+                <button class="upgrade-btn">Adquirir Premium</button>
+            `;
+            targetElement.appendChild(hoverCard);
+
+            const upgradeBtn = hoverCard.querySelector('.upgrade-btn');
+            upgradeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.open('https://arbflash.com/', '_blank');
+            });
+
             if (feature.isInput) {
                 feature.element.disabled = true;
+                feature.element.removeEventListener(feature.event, feature.handler);
                 feature.element.addEventListener('click', showUpgradeAlert);
+                feature.element.addEventListener('focus', showUpgradeAlert);
             } else {
-                feature.element.addEventListener('click', (e) => { e.preventDefault(); showUpgradeAlert(); });
+                feature.element.removeEventListener(feature.event, showUpgradeAlert);
+                feature.element.addEventListener(feature.event, feature.handler);
             }
+
             if (labelElement && !labelElement.querySelector(".lock-icon")) {
-                labelElement.innerHTML += lockIconHtml;
+                if (feature.isNav) {
+                    const lockIcon = document.createElement('span');
+                    lockIcon.className = 'lock-icon';
+                    lockIcon.textContent = '🔒';
+                    labelElement.insertBefore(lockIcon, labelElement.firstChild);
+                } else {
+                    labelElement.innerHTML += lockIconHtml;
+                }
             }
         } else {
             targetElement.classList.remove("premium-locked");
-            if (targetElement.querySelector('.premium-hover-card')) targetElement.querySelector('.premium-hover-card').remove();
+
+            const existingHoverCard = targetElement.querySelector('.premium-hover-card');
+            if (existingHoverCard) existingHoverCard.remove();
+
             if (feature.isInput) {
                 feature.element.disabled = false;
+                feature.element.removeEventListener('click', showUpgradeAlert);
+                feature.element.removeEventListener('focus', showUpgradeAlert);
+                feature.element.addEventListener(feature.event, feature.handler);
+            } else {
+                feature.element.removeEventListener(feature.event, showUpgradeAlert);
+                feature.element.addEventListener(feature.event, feature.handler);
             }
-            if(feature.handler) feature.element.addEventListener(feature.isInput ? 'change' : 'click', feature.handler);
-            if (labelElement?.querySelector(".lock-icon")) labelElement.querySelector(".lock-icon").remove();
+
+            if (labelElement) {
+                const lockIcon = labelElement.querySelector(".lock-icon");
+                if (lockIcon) lockIcon.remove();
+            }
         }
     });
 }
+
+// Função para configurar event listeners e substituir event handlers inline
+function setupEventListeners() {
+    // Event listeners para cabeçalhos de tabela sortable
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.sortable')) {
+            const sortableElement = e.target.closest('.sortable');
+            const sortColumn = sortableElement.getAttribute('data-sort');
+            if (sortColumn) {
+                sortByColumn(sortColumn);
+            }
+        }
+        
+        // Event listener para botões de copiar
+        if (e.target.classList.contains('copy-btn')) {
+            const copyValue = e.target.getAttribute('data-copy-value');
+            if (copyValue) {
+                copiarParaClipboard(copyValue, e.target);
+            }
+        }
+        
+        // Event listener para ícone de abrir gráficos
+        if (e.target.closest('.open-exchange-icon')) {
+            const icon = e.target.closest('.open-exchange-icon');
+            const buyEx = icon.getAttribute('data-buy-ex');
+            const buyInst = icon.getAttribute('data-buy-inst');
+            const sellEx = icon.getAttribute('data-sell-ex');
+            const sellInst = icon.getAttribute('data-sell-inst');
+            const pair = icon.getAttribute('data-pair');
+            const direction = icon.getAttribute('data-direction');
+            const opData = icon.getAttribute('data-op-data');
+            
+            if (buyEx && buyInst && sellEx && sellInst && pair && direction) {
+                abrirGraficosComLayout(buyEx, buyInst, sellEx, sellInst, pair, direction, opData);
+            }
+        }
+        
+        // Event listener para links de exchange
+        if (e.target.closest('.exchange-link')) {
+            e.preventDefault();
+            const link = e.target.closest('.exchange-link');
+            const exchange = link.getAttribute('data-exchange');
+            const instrument = link.getAttribute('data-instrument');
+            const pair = link.getAttribute('data-pair');
+            
+            if (exchange && instrument && pair) {
+                const url = getExchangeUrl(exchange, instrument, pair);
+                if (url) {
+                    window.open(url, '_blank');
+                }
+            }
+            return false;
+        }
+        
+        // Event listener para ícone da calculadora
+        if (e.target.closest('.calculator-icon')) {
+            const icon = e.target.closest('.calculator-icon');
+            const pair = icon.getAttribute('data-pair');
+            const direction = icon.getAttribute('data-direction');
+            const buyEx = icon.getAttribute('data-buy-ex');
+            const sellEx = icon.getAttribute('data-sell-ex');
+            
+            if (pair && direction && buyEx && sellEx) {
+                abrirCalculadora(pair, direction, buyEx, sellEx, true);
+            }
+        }
+        
+        // Event listener para estrela de favoritar
+        if (e.target.classList.contains('favorite-star')) {
+            const opKey = e.target.getAttribute('data-op-key');
+            if (opKey) {
+                toggleFavorite(opKey);
+            }
+        }
+        
+        // Event listener para ícone de bloquear
+        if (e.target.classList.contains('block-icon')) {
+            const opKey = e.target.getAttribute('data-op-key');
+            const opData = e.target.getAttribute('data-op-data');
+            if (opKey && opData) {
+                toggleBlock(opKey, opData);
+            }
+        }
+        
+        // Event listener para botão de reabilitar
+        if (e.target.classList.contains('rehab-button')) {
+            const opKey = e.target.getAttribute('data-op-key');
+            if (opKey) {
+                unblockOpportunity(opKey);
+            }
+        }
+    });
+}
+
+// Inicializar event listeners quando o DOM estiver carregado
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupEventListeners);
+} else {
+    setupEventListeners();
+}
+
+
+
+filterMinProfitEDisplayEl.addEventListener("change", (event) => {
+    state.filters.minProfitEFilterDisplay = parseFloat(event.target.value);
+    requestUiUpdate();
+});
+
+filterMinProfitSDisplayEl.addEventListener("change", (event) => {
+    state.filters.minProfitSFilterDisplay = parseFloat(event.target.value);
+    requestUiUpdate();
+});
+
+
+
+
+
+elements.sidebarToggle.addEventListener("click", toggleSidebar);
+watchedPairsHeaderEl.addEventListener("click", toggleWatchedPairs);
+monitorParesHeaderEl.addEventListener("click", toggleMonitorPares);
+
+function toggleWatchedPairs() {
+    state.isWatchedPairsExpanded = !state.isWatchedPairsExpanded;
+    watchedPairsTableContainerEl.style.display = state.isWatchedPairsExpanded ? '' : 'none';
+    watchedPairsToggleIconEl.innerHTML = state.isWatchedPairsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+    localStorage.setItem(WATCHED_PAIRS_EXPANDED_KEY, state.isWatchedPairsExpanded);
+}
+
+function toggleMonitorPares() {
+    state.isMonitorParesExpanded = !state.isMonitorParesExpanded;
+    monitorParesTableContainerEl.style.display = state.isMonitorParesExpanded ? '' : 'none';
+    monitorParesToggleIconEl.innerHTML = state.isMonitorParesExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+    localStorage.setItem(MONITOR_PARES_EXPANDED_KEY, state.isMonitorParesExpanded);
+}
+
+// Inicializar estado dos painéis ao carregar
+function initializePanelStates() {
+    state.isWatchedPairsExpanded = localStorage.getItem(WATCHED_PAIRS_EXPANDED_KEY) === 'true';
+    watchedPairsTableContainerEl.style.display = state.isWatchedPairsExpanded ? '' : 'none';
+    watchedPairsToggleIconEl.innerHTML = state.isWatchedPairsExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+
+    state.isMonitorParesExpanded = localStorage.getItem(MONITOR_PARES_EXPANDED_KEY) === 'true';
+    monitorParesTableContainerEl.style.display = state.isMonitorParesExpanded ? '' : 'none';
+    monitorParesToggleIconEl.innerHTML = state.isMonitorParesExpanded ? ICON_EXPANDED : ICON_COLLAPSED;
+}
+
+// Chamar a função de inicialização quando o DOM estiver carregado
+document.addEventListener('DOMContentLoaded', initializePanelStates);
+
+

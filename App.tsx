@@ -53,14 +53,20 @@ function App() {
       if (message.type === 'opportunity') {
         // Adicionar nova oportunidade à lista
         setOpportunities(prev => {
-          const updatedOpportunities = prev.map(op => 
-            (op.pair === message.data.pair && op.direction === message.data.direction) ? message.data : op
+          // Verificar se já existe uma oportunidade com o mesmo par e direção
+          const existingIndex = prev.findIndex(
+            op => op.pair === message.data.pair && op.direction === message.data.direction
           );
-          const newOpportunity = message.data;
-          if (!updatedOpportunities.some(op => op.pair === newOpportunity.pair && op.direction === newOpportunity.direction)) {
-            updatedOpportunities.unshift(newOpportunity);
+          
+          if (existingIndex >= 0) {
+            // Atualizar oportunidade existente
+            const updated = [...prev];
+            updated[existingIndex] = message.data;
+            return updated;
+          } else {
+            // Adicionar nova oportunidade
+            return [message.data, ...prev].slice(0, 20); // Manter apenas as 20 mais recentes
           }
-          return updatedOpportunities.filter(op => op.netSpreadPercentage >= (config.arbitrage?.min_profit_percentage || 0.0)).slice(0, 20);
         });
         setLastUpdated(new Date());
       } else if (message.type === 'opportunities') {
