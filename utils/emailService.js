@@ -1,39 +1,4 @@
-const nodemailer = require('nodemailer');
-
-// Configura o transporte de e‑mail usando variáveis de ambiente.
-// Cria o transportador SMTP. Algumas hospedagens utilizam certificados autoassinados,
-// portanto adicionamos tls.rejectUnauthorized: false para evitar falhas na verificação.
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT, 10) || 587,
-  secure: process.env.SMTP_SECURE === 'true', // true para SSL (porta 465), false para STARTTLS (porta 587)
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  connectionTimeout: 30000, // 30 segundos
-  greetingTimeout: 30000,   // 30 segundos
-  socketTimeout: 30000,     // 30 segundos
-});
-
-/**
- * Envia um e‑mail de boas‑vindas com link para definição de senha (para usuários que compraram premium).
- * @param {string} toEmail Email do destinatário.
- */
-async function sendWelcomeEmail(toEmail) {
-  console.log(`📧 Enviando email de boas-vindas (premium) para: ${toEmail}`);
-  
-  // Gera link para a página de redefinição de senha, anexando o e‑mail como query.
-  const resetLink = `${process.env.APP_BASE_URL || 'https://app.arbflash.com'}/forgot-password.html?email=${encodeURIComponent(toEmail)}`;
-
-  const message = {
-    from: process.env.FROM_EMAIL || 'no-reply@arbflash.com',
-    to: toEmail,
-    subject: 'Bem-vindo ao ARBFLASH Premium! ⚡',
-    html: `
+const nodemailer=require("nodemailer");const transporter=nodemailer.createTransport({host:process.env.SMTP_HOST,port:parseInt(process.env.SMTP_PORT,10)||587,secure:process.env.SMTP_SECURE==="true",auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS},tls:{rejectUnauthorized:false},connectionTimeout:3e4,greetingTimeout:3e4,socketTimeout:3e4});async function sendWelcomeEmail(toEmail){console.log(`📧 Enviando email de boas-vindas (premium) para: ${toEmail}`);const resetLink=`${process.env.APP_BASE_URL||"https://app.arbflash.com"}/forgot-password.html?email=${encodeURIComponent(toEmail)}`;const message={from:process.env.FROM_EMAIL||"no-reply@arbflash.com",to:toEmail,subject:"Bem-vindo ao ARBFLASH Premium! ⚡",html:`
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
         <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
@@ -75,7 +40,7 @@ async function sendWelcomeEmail(toEmail) {
           </p>
           
           <p style="font-size: 16px; line-height: 1.6; color: #333;">
-            Se você já criou uma senha anteriormente, basta fazer login normalmente em <a href="${process.env.APP_BASE_URL || 'https://app.arbflash.com'}" style="color: #2c5aa0;">app.arbflash.com</a>.
+            Se você já criou uma senha anteriormente, basta fazer login normalmente em <a href="${process.env.APP_BASE_URL||"https://app.arbflash.com"}" style="color: #2c5aa0;">app.arbflash.com</a>.
           </p>
           
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
@@ -86,36 +51,7 @@ async function sendWelcomeEmail(toEmail) {
           </p>
         </div>
       </div>
-    `,
-  };
-
-  try {
-    const result = await transporter.sendMail(message);
-    console.log(`✅ Email de boas-vindas (premium) enviado com sucesso!`);
-    console.log(`📋 ID da mensagem: ${result.messageId}`);
-    return result;
-  } catch (error) {
-    console.error(`❌ Erro ao enviar email de boas-vindas (premium):`, error);
-    throw error;
-  }
-}
-
-/**
- * Envia um e‑mail de boas-vindas para novos cadastros (conta free).
- * @param {string} toEmail Email do destinatário.
- * @param {string} userName Nome do usuário.
- */
-async function sendFreeWelcomeEmail(toEmail, userName = 'Novo usuário') {
-  console.log(`📧 Enviando email de boas-vindas (free) para: ${toEmail}`);
-  
-  const loginLink = `${process.env.APP_BASE_URL || 'https://app.arbflash.com'}/login.html`;
-  const upgradeLink = `http://arbflash.com/`; // Página de vendas
-
-  const message = {
-    from: process.env.FROM_EMAIL || 'no-reply@arbflash.com',
-    to: toEmail,
-    subject: 'Bem-vindo ao ARBFLASH! Comece a lucrar com arbitragem ⚡',
-    html: `
+    `};try{const result=await transporter.sendMail(message);console.log(`✅ Email de boas-vindas (premium) enviado com sucesso!`);console.log(`📋 ID da mensagem: ${result.messageId}`);return result}catch(error){console.error(`❌ Erro ao enviar email de boas-vindas (premium):`,error);throw error}}async function sendFreeWelcomeEmail(toEmail,userName="Novo usuário"){console.log(`📧 Enviando email de boas-vindas (free) para: ${toEmail}`);const loginLink=`${process.env.APP_BASE_URL||"https://app.arbflash.com"}/login.html`;const upgradeLink=`http://arbflash.com/`;const message={from:process.env.FROM_EMAIL||"no-reply@arbflash.com",to:toEmail,subject:"Bem-vindo ao ARBFLASH! Comece a lucrar com arbitragem ⚡",html:`
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
         <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
@@ -172,35 +108,7 @@ async function sendFreeWelcomeEmail(toEmail, userName = 'Novo usuário') {
           </p>
         </div>
       </div>
-    `,
-  };
-
-  try {
-    const result = await transporter.sendMail(message);
-    console.log(`✅ Email de boas-vindas (free) enviado com sucesso!`);
-    console.log(`📋 ID da mensagem: ${result.messageId}`);
-    return result;
-  } catch (error) {
-    console.error(`❌ Erro ao enviar email de boas-vindas (free):`, error);
-    throw error;
-  }
-}
-
-/**
- * Envia um e‑mail de parabéns para usuários existentes que compraram premium.
- * @param {string} toEmail Email do destinatário.
- * @param {string} userName Nome do usuário.
- */
-async function sendPremiumUpgradeEmail(toEmail, userName = 'Usuário') {
-  console.log(`📧 Enviando email de parabéns (upgrade premium) para: ${toEmail}`);
-  
-  const loginLink = `${process.env.APP_BASE_URL || 'https://app.arbflash.com'}/login.html`;
-
-  const message = {
-    from: process.env.FROM_EMAIL || 'no-reply@arbflash.com',
-    to: toEmail,
-    subject: 'Parabéns! Sua conta foi atualizada para Premium! 🎉',
-    html: `
+    `};try{const result=await transporter.sendMail(message);console.log(`✅ Email de boas-vindas (free) enviado com sucesso!`);console.log(`📋 ID da mensagem: ${result.messageId}`);return result}catch(error){console.error(`❌ Erro ao enviar email de boas-vindas (free):`,error);throw error}}async function sendPremiumUpgradeEmail(toEmail,userName="Usuário"){console.log(`📧 Enviando email de parabéns (upgrade premium) para: ${toEmail}`);const loginLink=`${process.env.APP_BASE_URL||"https://app.arbflash.com"}/login.html`;const message={from:process.env.FROM_EMAIL||"no-reply@arbflash.com",to:toEmail,subject:"Parabéns! Sua conta foi atualizada para Premium! 🎉",html:`
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
         <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
@@ -251,36 +159,7 @@ async function sendPremiumUpgradeEmail(toEmail, userName = 'Usuário') {
           </p>
         </div>
       </div>
-    `,
-  };
-
-  try {
-    const result = await transporter.sendMail(message);
-    console.log(`✅ Email de parabéns (upgrade premium) enviado com sucesso!`);
-    console.log(`📋 ID da mensagem: ${result.messageId}`);
-    return result;
-  } catch (error) {
-    console.error(`❌ Erro ao enviar email de parabéns (upgrade premium):`, error);
-    throw error;
-  }
-}
-
-/**
- * Envia um e‑mail de redefinição de senha com um token de reset.
- * @param {string} toEmail Email do destinatário.
- * @param {string} token Token gerado para o reset.
- */
-async function sendPasswordResetEmail(toEmail, token) {
-  console.log(`📧 Enviando email de redefinição de senha para: ${toEmail}`);
-  console.log(`🔑 Token gerado: ${token.substring(0, 8)}...`);
-  
-  // Use a página de recuperação existente, passando o token como parâmetro.
-  const resetLink = `${process.env.APP_BASE_URL || 'https://app.arbflash.com'}/forgot-password.html?token=${encodeURIComponent(token)}`;
-  const message = {
-    from: process.env.FROM_EMAIL || 'no-reply@arbflash.com',
-    to: toEmail,
-    subject: 'Recuperação de senha - ARBFLASH',
-    html: `
+    `};try{const result=await transporter.sendMail(message);console.log(`✅ Email de parabéns (upgrade premium) enviado com sucesso!`);console.log(`📋 ID da mensagem: ${result.messageId}`);return result}catch(error){console.error(`❌ Erro ao enviar email de parabéns (upgrade premium):`,error);throw error}}async function sendPasswordResetEmail(toEmail,token){console.log(`📧 Enviando email de redefinição de senha para: ${toEmail}`);console.log(`🔑 Token gerado: ${token.substring(0,8)}...`);const resetLink=`${process.env.APP_BASE_URL||"https://app.arbflash.com"}/forgot-password.html?token=${encodeURIComponent(token)}`;const message={from:process.env.FROM_EMAIL||"no-reply@arbflash.com",to:toEmail,subject:"Recuperação de senha - ARBFLASH",html:`
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
         <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
@@ -329,24 +208,4 @@ async function sendPasswordResetEmail(toEmail, token) {
           </p>
         </div>
       </div>
-    `,
-  };
-  
-  try {
-    const result = await transporter.sendMail(message);
-    console.log(`✅ Email de redefinição de senha enviado com sucesso!`);
-    console.log(`📋 ID da mensagem: ${result.messageId}`);
-    return result;
-  } catch (error) {
-    console.error(`❌ Erro ao enviar email de redefinição de senha:`, error);
-    throw error;
-  }
-}
-
-module.exports = { 
-  sendWelcomeEmail, 
-  sendFreeWelcomeEmail, 
-  sendPremiumUpgradeEmail, 
-  sendPasswordResetEmail 
-};
-
+    `};try{const result=await transporter.sendMail(message);console.log(`✅ Email de redefinição de senha enviado com sucesso!`);console.log(`📋 ID da mensagem: ${result.messageId}`);return result}catch(error){console.error(`❌ Erro ao enviar email de redefinição de senha:`,error);throw error}}module.exports={sendWelcomeEmail:sendWelcomeEmail,sendFreeWelcomeEmail:sendFreeWelcomeEmail,sendPremiumUpgradeEmail:sendPremiumUpgradeEmail,sendPasswordResetEmail:sendPasswordResetEmail};
