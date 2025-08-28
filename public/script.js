@@ -824,7 +824,7 @@ function renderWatchedPairsTable() {
                         <td><div class="profit-cell ${lucroSClass}">${formatDirectProfitPercentage(lucroS_percent)}</div></td>
                         <td><div class="volume-cell">${volumeDisplay}</div></td>
                         <td><div class="funding-cell ${fundingRateClass}">${fundingRateDisplay}</div></td>
-                        <td><div class="time-cell ${timeInfo.class}">${timeInfo.text}</div></td>
+                        
                     </tr>
                 `;
             });
@@ -984,7 +984,6 @@ function renderOpportunitiesTable() {
                 <td><div class="volume-cell">${volumeDisplay}</div></td>
                 <td><div class="funding-cell ${fundingRateClass}">${fundingRateDisplay}</div></td>
                 <td class="qty-cell" title="Qtd. de ${escapeHTML(baseAsset)} para ${currentDefaultCapital.toLocaleString("pt-BR", {style:"currency", currency:"USD"})}">${qtyCellContent}</td>
-                <td><div class="time-cell ${timeInfo.class}">${timeInfo.text}</div></td>
                 <td class="action-cell">${calculatorIcon}</td>
             </tr>`;
         } catch (error) {
@@ -1344,7 +1343,7 @@ function setupEventListeners() {
             const url = getExchangeUrl(exchangeLink.dataset.exchange, exchangeLink.dataset.instrument, exchangeLink.dataset.pair);
             if (url) window.open(url, "_blank");
         } else if (calculatorIcon) {
-            abrirCalculadora(calculatorIcon.dataset.pair, calculatorIcon.dataset.direction, calculatorIcon.dataset.buyEx, calculatorIcon.dataset.sellEx, true);
+            abrirCalculadora(calculatorIcon.dataset.pair, calculatorIcon.dataset.direction, calculatorIcon.dataset.buyEx, calculatorIcon.dataset.sellEx);
         } else if (blockIcon) {
             toggleBlock(blockIcon.dataset.opKey, blockIcon.dataset.opData);
         } else if (rehabButton) {
