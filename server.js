@@ -27,12 +27,19 @@ const OpportunitySignaler = require('./lib/OpportunitySignaler');
 
 const broadcastToClients = (wssInstance, data) => {
     if (!wssInstance || !wssInstance.clients) return;
+    const message = JSON.stringify(data);
     wssInstance.clients.forEach(c => {
         if (c.readyState === WebSocket.OPEN && c.userId) {
-            if (data.type === 'opportunity' && c.subscriptionStatus === 'free' && data.data.netSpreadPercentage >= 1.0) {
+            // Filtra oportunidades >1% para usuários 'free' no momento do broadcast
+            if (data.type === 'opportunities' && c.subscriptionStatus === 'free') {
+                const filteredData = {
+                    ...data,
+                    data: data.data.filter(op => op.netSpreadPercentage < 1.0)
+                };
+                c.send(JSON.stringify(filteredData));
                 return;
             }
-            c.send(JSON.stringify(data));
+            c.send(message);
         }
     });
 };
@@ -44,10 +51,6 @@ function createLoggerWithWSS(wssInstance, currentConfig) {
         if (level === 'error') console.error(formattedMsg);
         else if (level === 'warn') console.warn(formattedMsg);
         else console.log(formattedMsg);
-        
-        if (wssInstance) {
-            broadcastToClients(wssInstance, { type: 'log', level, message: msg });
-        }
     };
     return {
         info: (msg) => log('info', msg),
@@ -58,11 +61,10 @@ function createLoggerWithWSS(wssInstance, currentConfig) {
 }
 
 class WebSocketOpportunitySignaler extends OpportunitySignaler {
-    constructor(sigConfig, signalerLogger, wssInstance) {
+    constructor(sigConfig, signalerLogger) {
         super(sigConfig, signalerLogger);
-        this.wss = wssInstance;
         this.opportunities = [];
-        this.maxOpportunities = 30;
+        this.maxOpportunities = 50;
     }
 
     signal(opportunity) {
@@ -70,28 +72,59 @@ class WebSocketOpportunitySignaler extends OpportunitySignaler {
 
         const existingIndex = this.opportunities.findIndex(op => op.pair === opportunity.pair && op.direction === opportunity.direction);
         
+        opportunity.lastSeen = Date.now();
+
         if (existingIndex > -1) {
-            // A oportunidade já existe, atualize-a, mas preserve o firstSeen original.
-            const oldOpportunity = this.opportunities[existingIndex];
-            opportunity.firstSeen = oldOpportunity.firstSeen; // Mantém o timestamp original
+            opportunity.firstSeen = this.opportunities[existingIndex].firstSeen;
             this.opportunities[existingIndex] = opportunity;
         } else {
-            // Nova oportunidade, defina o firstSeen para agora.
             opportunity.firstSeen = Date.now();
-            this.opportunities.unshift(opportunity); // Adiciona no início da lista
+            this.opportunities.unshift(opportunity);
 
-            // Limita o tamanho da lista de oportunidades
             if (this.opportunities.length > this.maxOpportunities) {
                 this.opportunities.pop();
             }
         }
-        broadcastToClients(this.wss, { type: 'opportunity', data: opportunity });
+    }
+
+    pruneStaleOpportunities(currentTime, ttl) {
+        this.opportunities = this.opportunities.filter(op => (currentTime - op.lastSeen) < ttl);
     }
 
     getOpportunities() { 
         return this.opportunities; 
     }
 }
+
+const createMasterUser = async () => {
+    const masterEmail = process.env.MASTER_USER_EMAIL;
+    const masterPassword = process.env.MASTER_USER_PASSWORD;
+
+    if (!masterEmail || !masterPassword) {
+        logger.info('[MasterUser] Credenciais de usuário mestre não definidas no arquivo .env. Pulando criação.');
+        return;
+    }
+
+    try {
+        const existingUser = await User.findOne({ where: { email: masterEmail } });
+
+        if (!existingUser) {
+            const masterUser = await User.create({
+                name: 'Master Admin',
+                email: masterEmail,
+                password: masterPassword,
+                subscriptionStatus: 'active', // Define o usuário como premium
+                emailVerified: true // Já considera o email como verificado
+            });
+            await UserConfiguration.create({ UserId: masterUser.id });
+            logger.info(`[MasterUser] Usuário mestre '${masterEmail}' criado com sucesso.`);
+        } else {
+            logger.info(`[MasterUser] Usuário mestre '${masterEmail}' já existe.`);
+        }
+    } catch (error) {
+        logger.error(`[MasterUser] Erro ao criar o usuário mestre: ${error.message}`);
+    }
+};
 
 async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
     if (!connector) return [];
@@ -118,7 +151,6 @@ async function fetchAndFilterPairs(connector, exchangeName, exchangeConfig) {
         return [];
     }
 }
-
 
 // --- 3. CONFIGURAÇÃO PRINCIPAL E INICIALIZAÇÃO ---
 
@@ -169,7 +201,7 @@ config.gateio.api_key = process.env.MY_GATEIO_API_KEY;
 config.gateio.api_secret = process.env.MY_GATEIO_API_SECRET;
 
 const connectors = { mexc: new MEXCConnector(config.mexc, logger), gateio: new GateConnector(config.gateio, logger) };
-const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger, wss);
+const opportunitySignaler = new WebSocketOpportunitySignaler(config.signaling, logger);
 const arbitrageEngine = new ArbitrageEngine(config, opportunitySignaler, logger);
 let marketMonitor;
 
@@ -218,7 +250,6 @@ app.post('/api/config/arbitrage/spot', isAuthenticated, (req, res) => {
     }
 });
 
-// NOVO ENDPOINT PARA ATUALIZAR A FREQUÊNCIA
 app.post('/api/config/update-interval', isAuthenticated, (req, res) => {
     const { interval } = req.body;
     const newInterval = parseInt(interval);
@@ -238,7 +269,6 @@ app.post('/api/config/update-interval', isAuthenticated, (req, res) => {
         res.status(500).json({ success: false, message: 'Não foi possível alterar o intervalo no momento.' });
     }
 });
-
 
 app.get('/api/opportunities', isAuthenticated, (req, res) => res.json(opportunitySignaler.getOpportunities()));
 app.get('/api/config', isAuthenticated, (req, res) => res.json({ arbitrage: config.arbitrage, exchanges: config.exchanges }));
@@ -264,13 +294,14 @@ wss.on("connection", async (wsClient) => {
         wsClient.subscriptionStatus = user ? user.subscriptionStatus : 'free';
         logger.info(`User ${wsClient.userId} subscription status: ${wsClient.subscriptionStatus}`);
 
-        const allOpportunities = opportunitySignaler.getOpportunities();
-        const initialOpportunities = allOpportunities.filter(op => {
-            // Filtra as oportunidades para usuários 'free'
-            return !(wsClient.subscriptionStatus === 'free' && op.netSpreadPercentage >= 1.0);
-        });
-        // Garante que o 'firstSeen' seja enviado corretamente
-        wsClient.send(JSON.stringify({ type: 'opportunities', data: initialOpportunities }));
+        const initialOpportunities = opportunitySignaler.getOpportunities();
+        const initialData = { type: 'opportunities', data: initialOpportunities };
+        
+        if (wsClient.subscriptionStatus === 'free') {
+            initialData.data = initialData.data.filter(op => op.netSpreadPercentage < 1.0);
+        }
+
+        wsClient.send(JSON.stringify(initialData));
 
         if (marketMonitor) {
             wsClient.send(JSON.stringify({ type: 'all_pairs_update', data: marketMonitor.getAllMarketData() }));
@@ -345,9 +376,12 @@ app.use((err, req, res, next) => {
 
 // --- 6. INÍCIO DA EXECUÇÃO ---
 sequelize.sync({ alter: true })
-    .then(() => {
+    .then(async () => {
         mySessionStore.sync();
         logger.info("Database and session store synchronized.");
+        
+        await createMasterUser();
+
         const PORT = process.env.PORT || 3000;
         server.listen(PORT, () => {
             logger.info(`Server listening on port ${PORT}.`);
@@ -358,6 +392,17 @@ sequelize.sync({ alter: true })
         logger.error(`[CRITICAL] Could not connect/sync to the database: ${err.message}`);
         process.exit(1);
     });
+
+const BROADCAST_INTERVAL_MS = 1000;
+const OPPORTUNITY_TTL_MS = 4000;
+
+setInterval(() => {
+    if (opportunitySignaler) {
+        opportunitySignaler.pruneStaleOpportunities(Date.now(), OPPORTUNITY_TTL_MS);
+        const freshList = opportunitySignaler.getOpportunities();
+        broadcastToClients(wss, { type: 'opportunities', data: freshList });
+    }
+}, BROADCAST_INTERVAL_MS);
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
