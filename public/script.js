@@ -221,13 +221,13 @@ function getFilteredOpportunities() {
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
         if (state.currentView === "arbitragens") {
     // Alterado de > 0 para >= 0.5
-    if (!(op.netSpreadPercentage >= 0.5 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay)) {
+    if (op.netSpreadPercentage < 0.5 || op.netSpreadPercentage < state.filters.minProfitEFilterDisplay) {
         return false;
     }
 } else if (state.currentView === "saida-op") {
     const lucroS = calculateLucroS(op, state.allPairsData, state.config);
     // Alterado de <= 0 para < 0.5
-    if (lucroS === null || lucroS < 0.5 || lucroS < state.filters.minProfitSFilterDisplay) {
+    if (lucroS === null || lucroS < 0 || lucroS < state.filters.minProfitSFilterDisplay) {
         return false;
     }
 } else if (state.currentView === "ambos-positivos") {
@@ -1035,7 +1035,7 @@ function renderOpportunitiesTable() {
 
             const timeInfo = formatTimeAgo(firstSeen);
             
-            tableHtml += `<tr>
+            tableHtml += `<tr data-op-key="${escapedOpKey}">
                 <td class="pair-cell">
                     <div class="pair-cell-content">
                         <span class="block-icon not-blocked" data-op-key="${escapedOpKey}" data-op-data="${opDataForSnapshot}" title="Bloquear">🚫</span>
@@ -1208,6 +1208,12 @@ function connectWebSocket() {
                 if (existingIndex > -1) {
                     const existingWrapper = state.arbitrageOpportunities[existingIndex];
                     existingWrapper.data = opportunityData;
+                    // Se a oportunidade inverteu (lucro passou a ser negativo), zera o firstSeen
+                    if (existingWrapper.data.netSpreadPercentage < 0 && existingWrapper.firstSeen !== null) {
+                        existingWrapper.firstSeen = null; // Ou Date.now() se quiser que comece a contar do zero novamente
+                    } else if (existingWrapper.data.netSpreadPercentage >= 0 && existingWrapper.firstSeen === null) {
+                        existingWrapper.firstSeen = Date.now(); // Começa a contar quando volta a ser positivo
+                    }
                 } else {
                     state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: opportunityData.firstSeen });
                 }
@@ -1220,9 +1226,18 @@ function connectWebSocket() {
                         oldOp.data.pair === newOp.pair && oldOp.data.direction === newOp.direction
                     );
                     if (existingOp) {
-                        return { data: newOp, firstSeen: existingOp.firstSeen };
+                        // Se a oportunidade já existe, mas o lucro inverteu para negativo, zera o firstSeen
+                        if (newOp.netSpreadPercentage < 0 && existingOp.firstSeen !== null) {
+                            return { data: newOp, firstSeen: null };
+                        } else if (newOp.netSpreadPercentage >= 0 && existingOp.firstSeen === null) {
+                            // Se o lucro voltou a ser positivo e o firstSeen estava zerado, começa a contar novamente
+                            return { data: newOp, firstSeen: Date.now() };
+                        } else {
+                            return { data: newOp, firstSeen: existingOp.firstSeen };
+                        }
                     } else {
-                        return { data: newOp, firstSeen: newOp.firstSeen || Date.now() };
+                        // Nova oportunidade, define firstSeen se for positiva, senão null
+                        return { data: newOp, firstSeen: newOp.netSpreadPercentage >= 0 ? Date.now() : null };
                     }
                 });
                 state.arbitrageOpportunities = updatedOpportunities;
