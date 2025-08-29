@@ -10,7 +10,7 @@ const HIDDEN_WATCHED_OPS_STORAGE_KEY = "arbitrageDashboard_hiddenWatchedOps_v1";
 const FAVORITES_STORAGE_KEY = "arbitrageDashboard_favoritedOps_v1";
 const BLOCKED_STORAGE_KEY = "arbitrageDashboard_blockedOps_v2";
 const THEME_STORAGE_KEY = "arbitrageDashboard_theme_v1";
-const UPDATE_INTERVAL_STORAGE_KEY = "arbitrageDashboard_updateInterval_v1"; // Nova constante
+const UPDATE_INTERVAL_STORAGE_KEY = "arbitrageDashboard_updateInterval_v1";
 
 const ICON_COLLAPSED = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
 const ICON_EXPANDED = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(90deg);"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
@@ -19,8 +19,8 @@ const state = {
     allPairsData: [],
     arbitrageOpportunities: [],
     config: {
-        general: { // Nova sub-estrutura para configurações gerais
-            main_tick_interval_ms: 1000 
+        general: {
+            main_tick_interval_ms: 1000
         },
         exchanges: {
             mexc: { spotMakerFee: 0, futuresMakerFee: 0.0001 },
@@ -61,7 +61,7 @@ const state = {
     currentUserSubscriptionStatus: null
 };
 
-// Disponibiliza o estado globalmente para que o script inline no index.html possa acessá-lo
+// Disponibiliza o estado globalmente para que outras partes possam acessá-lo
 window.frontendState = state;
 
 // =================================================================================
@@ -73,7 +73,7 @@ const pairsTableBodyEl = document.getElementById("pairs-table-body");
 const pairCountMonitorEl = document.getElementById("pair-count-monitor");
 const defaultCapitalInputEl = document.getElementById("default-capital-input");
 const qtySugBaseUnitHeaderEl = document.getElementById("qty-sug-base-unit-header");
-const updateIntervalSelectEl = document.getElementById("update-interval-select"); // Novo seletor
+const updateIntervalSelectEl = document.getElementById("update-interval-select");
 
 const elements = {
     sidebar: document.getElementById("sidebar"),
@@ -220,14 +220,23 @@ function getFilteredOpportunities() {
         if (state.watchedPairsList.includes(op.pair)) return false;
         if (state.blockedOps.some(blockedOp => `${op.pair}-${op.direction}` === blockedOp.key)) return false;
         if (state.currentView === "arbitragens") {
-            if (!(op.netSpreadPercentage > 0 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay)) return false;
-        } else if (state.currentView === "saida-op") {
-            const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-            if (lucroS === null || lucroS <= 0 || lucroS < state.filters.minProfitSFilterDisplay) return false;
-        } else if (state.currentView === "ambos-positivos") {
-            const lucroS = calculateLucroS(op, state.allPairsData, state.config);
-            if (!(op.netSpreadPercentage > 0 && lucroS > 0)) return false;
-        }
+    // Alterado de > 0 para >= 0.5
+    if (!(op.netSpreadPercentage >= 0.5 && op.netSpreadPercentage >= state.filters.minProfitEFilterDisplay)) {
+        return false;
+    }
+} else if (state.currentView === "saida-op") {
+    const lucroS = calculateLucroS(op, state.allPairsData, state.config);
+    // Alterado de <= 0 para < 0.5
+    if (lucroS === null || lucroS < 0.5 || lucroS < state.filters.minProfitSFilterDisplay) {
+        return false;
+    }
+} else if (state.currentView === "ambos-positivos") {
+    // ... (deixe a lógica para "ambos-positivos" como estava)
+    const lucroS = calculateLucroS(op, state.allPairsData, state.config);
+    if (!(op.netSpreadPercentage > 0 && lucroS > 0)) {
+        return false;
+    }
+}
         const isFutFut = op.buyInstrument?.toLowerCase().includes("futur") && op.sellInstrument?.toLowerCase().includes("futur");
         const isSpotSpot = op.buyInstrument?.toLowerCase().includes("spot") && op.sellInstrument?.toLowerCase().includes("spot");
         if (state.currentUserSubscriptionStatus === "free" && (isFutFut || isSpotSpot)) return false;
@@ -584,7 +593,7 @@ function formatPrice(price, decimals = 8) {
 }
 
 function formatDirectProfitPercentage(value) {
-    if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return "0.0000%";
+    if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return "-.--%";
     return (value >= 0 ? "+" : "") + value.toFixed(4) + "%";
 }
 
@@ -600,23 +609,20 @@ function formatTimeAgo(timestamp) {
     const now = Date.now();
     const ageMs = now - timestamp;
     
-    // Converter para dias, horas, minutos e segundos
     const days = Math.floor(ageMs / (1000 * 60 * 60 * 24));
     const hours = Math.floor((ageMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((ageMs % (1000 * 60)) / 1000);
     
-    // Determinar classe CSS baseada na idade
     let ageClass = "";
-    if (ageMs < 30000) { // Menos de 30 segundos - Verde (Fresh)
+    if (ageMs < 30000) { 
         ageClass = "fresh";
-    } else if (ageMs < 120000) { // Menos de 2 minutos - Laranja (Medium)
+    } else if (ageMs < 120000) {
         ageClass = "medium";
-    } else { // Mais de 2 minutos - Vermelho (Stale)
+    } else {
         ageClass = "stale";
     }
     
-    // Formato igual ao bot concorrente: "0d 0h 16m 21s"
     const text = `${days}d ${hours}h ${minutes}m ${seconds}s`;
     
     return { text, class: ageClass };
@@ -639,24 +645,25 @@ function formatVolume24hForDisplay(valueInUSDT) {
 function getExchangeTag(exchangeName) {
     if (!exchangeName) return "";
     const nameLower = exchangeName.toLowerCase();
-    if (nameLower !== 'mexc' && nameLower !== 'gateio') {
+    if (nameLower !== 'mexc' && nameLower !== 'gateio' && nameLower !== 'gate.io') {
         return `<span class="exchange-tag" title="${exchangeName}">${nameLower.substring(0,4)}</span>`;
     }
-    return `<span class="exchange-tag ${nameLower}" title="${exchangeName}">${nameLower.substring(0,4)}</span>`;
+    const finalName = nameLower === 'gate.io' ? 'gateio' : nameLower;
+    return `<span class="exchange-tag ${finalName}" title="${exchangeName}">${finalName.substring(0,4)}</span>`;
 }
 
 function calculateLucroS(op, allMarketData, config) {
     if (!op || !allMarketData || !config || !config.exchanges) return null;
     const { buyExchange, sellExchange, buyInstrument, sellInstrument, pair } = op;
-    const buyExLower = buyExchange.toLowerCase();
-    const sellExLower = sellExchange.toLowerCase();
+    const buyExLower = buyExchange.toLowerCase().replace('.io','');
+    const sellExLower = sellExchange.toLowerCase().replace('.io','');
 
-    const marketDataForSellExit = allMarketData.find(p => p.exchange.toLowerCase() === buyExLower && p.pair === pair);
-    const marketDataForBuyExit = allMarketData.find(p => p.exchange.toLowerCase() === sellExLower && p.pair === pair);
+    const marketDataForSellExit = allMarketData.find(p => p.exchange.toLowerCase().replace('.io','') === buyExLower && p.pair === pair);
+    const marketDataForBuyExit = allMarketData.find(p => p.exchange.toLowerCase().replace('.io','') === sellExLower && p.pair === pair);
     if (!marketDataForSellExit || !marketDataForBuyExit) return null;
-
-    const configSellExit = config.exchanges[buyExLower];
-    const configBuyExit = config.exchanges[sellExLower];
+    
+    const configSellExit = config.exchanges[buyExLower] || {};
+    const configBuyExit = config.exchanges[sellExLower] || {};
     if (!configSellExit || !configBuyExit) return null;
 
     let priceToSellForExit, feeForSellExit;
@@ -707,15 +714,15 @@ function renderPairsTable() {
         });
         pairsTableBodyEl.innerHTML = sortedPairsData.map(pD => {
             return `<tr>
-        <td>${getExchangeTag(pD.exchange)}</td>
-        <td class="pair-cell">${escapeHTML(pD.pair) || "N/A"}</td>
-        <td class="price-cell">${formatPrice(pD.spotPrice)}</td>
-        <td class="price-cell">${formatPrice(pD.futuresPrice)}</td>
-        <td class="price-cell">${formatPrice(pD.spotBid)}</td>
-        <td class="price-cell">${formatPrice(pD.futuresBid)}</td>
-        <td>${formatTimestamp(pD.spotTimestamp)}</td>
-        <td>${formatTimestamp(pD.futuresTimestamp)}</td>
-      </tr>`
+                <td>${getExchangeTag(pD.exchange)}</td>
+                <td><div class="pair-cell-content">${getCurrencyIcon(pD.pair)} <span class="pair-text">${escapeHTML(pD.pair) || "N/A"}</span></div></td>
+                <td class="price-cell">${formatPrice(pD.spotPrice)}</td>
+                <td class="price-cell">${formatPrice(pD.futuresPrice)}</td>
+                <td class="price-cell">${formatPrice(pD.spotBid)}</td>
+                <td class="price-cell">${formatPrice(pD.futuresBid)}</td>
+                <td>${formatTimestamp(pD.spotTimestamp)}</td>
+                <td>${formatTimestamp(pD.futuresTimestamp)}</td>
+            </tr>`
         }).join('');
     }
 }
@@ -723,129 +730,125 @@ function renderPairsTable() {
 function renderWatchedPairsTable() {
     const watchedPairsTableBodyEl = document.getElementById("watched-pairs-table-body");
     if (!watchedPairsTableBodyEl) return;
+
     if (state.watchedPairsList.length === 0) {
-        watchedPairsTableBodyEl.innerHTML = `<tr><td colspan="8" class="no-data">Adicione um par acima para vigiá-lo em tempo real.</td></tr>`;
+        watchedPairsTableBodyEl.innerHTML = `<tr><td colspan="10" class="no-data">Adicione um par acima para vigiá-lo em tempo real.</td></tr>`;
         return;
     }
 
     let tableHtml = "";
-    let combinationsFound = 0;
-
-    const opportunitiesByPair = state.watchedPairsList.reduce((acc, pair) => {
-        acc[pair] = state.arbitrageOpportunities.filter(opWrapper => {
-            const op = opWrapper.data;
-            if (op.pair !== pair) return false;
-            
-            const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
-            if (state.hiddenWatchedOps.has(opKey)) {
-                return false;
-            }
-
-            const isFutFut = op.buyInstrument?.toLowerCase().includes("futur") && op.sellInstrument?.toLowerCase().includes("futur");
-            const isSpotSpot = op.buyInstrument?.toLowerCase().includes("spot") && op.sellInstrument?.toLowerCase().includes("spot");
-            if (isFutFut && !state.config.arbitrage.enableFuturesVsFutures) return false;
-            if (isSpotSpot && !state.config.arbitrage.enableSpotVsSpot) return false;
-
-            const buyExchange = op.buyExchange?.toLowerCase();
-            const sellExchange = op.sellExchange?.toLowerCase();
-            const buyMarket = op.buyInstrument?.toLowerCase();
-            const sellMarket = op.sellInstrument?.toLowerCase();
-            
-            let buyAllowed = false;
-            let sellAllowed = false;
-
-            if (buyExchange === "mexc" && (buyMarket === "spot" || buyMarket === "ponto") && state.filters.mexcSpot) buyAllowed = true;
-            else if (buyExchange === "mexc" && (buyMarket === "futures" || buyMarket === "futuros") && state.filters.mexcFutures) buyAllowed = true;
-            else if (buyExchange === "gateio" && (buyMarket === "spot" || buyMarket === "ponto") && state.filters.gateioSpot) buyAllowed = true;
-            else if (buyExchange === "gateio" && (buyMarket === "futures" || buyMarket === "futuros") && state.filters.gateioFutures) buyAllowed = true;
-            
-            if (sellExchange === "mexc" && (sellMarket === "spot" || sellMarket === "ponto") && state.filters.mexcSpot) sellAllowed = true;
-            else if (sellExchange === "mexc" && (sellMarket === "futures" || sellMarket === "futuros") && state.filters.mexcFutures) sellAllowed = true;
-            else if (sellExchange === "gateio" && (sellMarket === "spot" || sellMarket === "ponto") && state.filters.gateioSpot) sellAllowed = true;
-            else if (sellExchange === "gateio" && (sellMarket === "futures" || sellMarket === "futuros") && state.filters.gateioFutures) sellAllowed = true;
-
-            return buyAllowed && sellAllowed;
-        });
-        return acc;
-    }, {});
+    let totalCombinationsFound = 0;
 
     state.watchedPairsList.forEach(pair => {
-        const opportunitiesForPair = opportunitiesByPair[pair];
-        if (opportunitiesForPair && opportunitiesForPair.length > 0) {
-            combinationsFound += opportunitiesForPair.length;
-            const escapedPair = escapeHTML(pair);
-            tableHtml += `
-                <tr class="watched-pair-header-row">
-                    <td colspan="8">
-                        <div class="watched-pair-header-content">
-                            <span class="watched-pair-title">${getCurrencyIcon(pair)} ${escapedPair}</span>
-                            <button class="remove-pair-button" data-pair="${escapedPair}" title="Remover este par da vigilância">Remover Par</button>
-                        </div>
-                    </td>
-                </tr>
-            `;
+        const escapedPair = escapeHTML(pair);
+        tableHtml += `
+            <tr class="watched-pair-header-row">
+                <td colspan="10">
+                    <div class="watched-pair-header-content">
+                        <span class="watched-pair-title">${getCurrencyIcon(pair)} ${escapedPair}</span>
+                        <button class="remove-pair-button" data-pair="${escapedPair}" title="Remover este par da vigilância">Remover Par</button>
+                    </div>
+                </td>
+            </tr>
+        `;
 
-            opportunitiesForPair.forEach(opWrapper => {
-                const op = opWrapper.data;
-                const lucroE_percent = op.netSpreadPercentage;
-                const lucroS_percent = calculateLucroS(op, state.allPairsData, state.config);
-                const lucroEClass = lucroE_percent >= 0 ? "profit-positive" : "profit-negative";
-                const lucroSClass = lucroS_percent === null ? "profit-zero" : (lucroS_percent >= 0 ? "profit-positive" : "profit-negative");
-                const opKey = `${op.pair}|${op.buyExchange}|${op.buyInstrument}|${op.sellExchange}|${op.sellInstrument}`;
+        const mexcData = state.allPairsData.find(d => d.exchange.toLowerCase() === 'mexc' && d.pair === pair);
+        const gateioData = state.allPairsData.find(d => d.exchange.toLowerCase() === 'gateio' && d.pair === pair);
 
-                let volumeDisplay, fundingRateDisplay, fundingRateClass = "profit-zero";
-                if (op.type === "INTER_EXCHANGE_FUT_FUT") {
-                    const volBuy = formatVolume24hForDisplay(op.futuresVolume24hUSD_buyLeg);
-                    const volSell = formatVolume24hForDisplay(op.futuresVolume24hUSD_sellLeg);
-                    volumeDisplay = `${volBuy} / ${volSell}`;
-                    fundingRateDisplay = formatRatioAsProfitPercentage(op.fundingRate_sellLeg);
-                    fundingRateClass = (op.fundingRate_sellLeg || 0) >= 0 ? "profit-positive" : "profit-negative";
-                } else if (op.type === "INTER_EXCHANGE_SPOT_SPOT") {
-                    const volBuy = formatVolume24hForDisplay(op.spotVolume24hUSD_buyLeg);
-                    const volSell = formatVolume24hForDisplay(op.spotVolume24hUSD_sellLeg);
-                    volumeDisplay = `${volBuy} / ${volSell}`;
-                    fundingRateDisplay = "N/A";
-                } else {
-                    volumeDisplay = `${formatVolume24hForDisplay(op.spotVolume24hUSD)} / ${formatVolume24hForDisplay(op.futuresVolume24hUSD)}`;
-                    fundingRateDisplay = formatRatioAsProfitPercentage(op.fundingRate);
-                    fundingRateClass = (op.fundingRate || 0) >= 0 ? "profit-positive" : "profit-negative";
+        const legs = [];
+        if (mexcData) {
+            if (mexcData.spotPrice) legs.push({ ex: 'MEXC', inst: 'SPOT', ask: mexcData.spotPrice, bid: mexcData.spotBid, fee: state.config.exchanges.mexc.spotMakerFee, vol: mexcData.spotVolume24hQuote });
+            if (mexcData.futuresPrice) legs.push({ ex: 'MEXC', inst: 'FUTUROS', ask: mexcData.futuresPrice, bid: mexcData.futuresBid, fee: state.config.exchanges.mexc.futuresMakerFee, vol: mexcData.futuresVolume24hQuote, funding: mexcData.futuresFundingRate });
+        }
+        if (gateioData) {
+            if (gateioData.spotPrice) legs.push({ ex: 'Gate.io', inst: 'SPOT', ask: gateioData.spotPrice, bid: gateioData.spotBid, fee: state.config.exchanges.gateio.spotMakerFee, vol: gateioData.spotVolume24hQuote });
+            if (gateioData.futuresPrice) legs.push({ ex: 'Gate.io', inst: 'FUTUROS', ask: gateioData.futuresPrice, bid: gateioData.futuresBid, fee: state.config.exchanges.gateio.futuresMakerFee, vol: gateioData.futuresVolume24hQuote, funding: gateioData.futuresFundingRate });
+        }
+
+        let combinationsForThisPair = 0;
+        
+        for (const buyLeg of legs) {
+            for (const sellLeg of legs) {
+                if (buyLeg.ex === sellLeg.ex && buyLeg.inst === sellLeg.inst) continue;
+
+                // Verifica se esta oportunidade específica está oculta
+                const opId = `${pair}_${buyLeg.ex}_${buyLeg.inst}_${sellLeg.ex}_${sellLeg.inst}`;
+                if (state.hiddenWatchedOps.has(opId)) continue;
+
+                // Lógica para 'QTD. SUG. (BASE)'
+                const baseAsset = pair ? pair.split('/')[0] : "";
+                const currentDefaultCapital = state.defaultCapitalUSD;
+                let qtyCellContent = "-";
+                if (currentDefaultCapital > 0 && buyLeg.ask > 0) {
+                    const qtdCalculada = arredondarQuantidadeSugerida(currentDefaultCapital / buyLeg.ask);
+                    const numericQtd = parseFloat(qtdCalculada);
+                    if (numericQtd > 0) {
+                        const displayQty = numericQtd.toLocaleString('pt-BR', { maximumFractionDigits: 8 });
+                        const copyValue = String(qtdCalculada);
+                        qtyCellContent = `${displayQty} <button class="copy-btn" data-copy-value="${copyValue}">📋</button>`;
+                    } else {
+                        qtyCellContent = "0";
+                    }
                 }
+                
+                // Lógica para 'CALCULADORA'
+                const direction = `Comprar ${buyLeg.ex}_${buyLeg.inst} / Vender ${sellLeg.ex}_${sellLeg.inst}`;
+                const calculatorIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="calculator-icon" data-pair="${escapedPair}" data-direction="${escapeHTML(direction)}" data-buy-ex="${escapeHTML(buyLeg.ex)}" data-sell-ex="${escapeHTML(sellLeg.ex)}" title="Abrir Calculadora Detalhada em nova janela"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="16" y1="10" x2="16" y2="10"></line><line x1="12" y1="10" x2="12" y2="10"></line><line x1="8" y1="10" x2="8" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="8" y1="14" x2="8" y2="18"></line></svg>`;
+                
+                const grossSpread = (sellLeg.bid / buyLeg.ask) - 1;
+                const netSpreadPercentage = (grossSpread - buyLeg.fee - sellLeg.fee) * 100;
+                const opDataForS = { pair, buyExchange: buyLeg.ex, sellExchange: sellLeg.ex, buyInstrument: buyLeg.inst, sellInstrument: sellLeg.inst };
+                const lucroS_percent = calculateLucroS(opDataForS, state.allPairsData, state.config);
+                const lucroEClass = netSpreadPercentage >= 0 ? "profit-positive" : "profit-negative";
+                const lucroSClass = lucroS_percent === null ? "profit-zero" : (lucroS_percent >= 0 ? "profit-positive" : "profit-negative");
+                const volumeDisplay = `${formatVolume24hForDisplay(buyLeg.vol)} / ${formatVolume24hForDisplay(sellLeg.vol)}`;
+                const fundingRate = (sellLeg.inst === 'FUTUROS') ? sellLeg.funding : null;
+                const fundingRateDisplay = formatRatioAsProfitPercentage(fundingRate);
+                const fundingRateClass = (fundingRate || 0) >= 0 ? "profit-positive" : "profit-negative";
 
-                const timeInfo = formatTimeAgo(op.timestamp);
                 tableHtml += `
                     <tr>
-                        <td class="pair-cell">
-                            <button class="hide-watched-op-button" data-op-key="${escapeHTML(opKey)}" title="Ocultar esta combinação">&times;</button>
-                            ${escapedPair}
-                        </td>
-                        <td><div class="exchange-link" data-exchange="${escapeHTML(op.buyExchange)}" data-instrument="${escapeHTML(op.buyInstrument)}" data-pair="${escapedPair}">${getExchangeTag(op.buyExchange)} ${op.buyInstrument}<span>${formatPrice(op.buyPrice)}</span></div></td>
-                        <td><div class="exchange-link" data-exchange="${escapeHTML(op.sellExchange)}" data-instrument="${escapeHTML(op.sellInstrument)}" data-pair="${escapedPair}">${getExchangeTag(op.sellExchange)} ${op.sellInstrument}<span>${formatPrice(op.sellPrice)}</span></div></td>
-                        <td><div class="profit-cell ${lucroEClass}">${formatDirectProfitPercentage(lucroE_percent)}</div></td>
+                        <td><div class="pair-cell-content">
+                            ${getCurrencyIcon(pair)}
+                            <span class="pair-text">${escapedPair}</span>
+                        </div></td>
+                        <td><div class="exchange-link" data-exchange="${escapeHTML(buyLeg.ex)}" data-instrument="${escapeHTML(buyLeg.inst)}" data-pair="${escapedPair}">${getExchangeTag(buyLeg.ex)} ${buyLeg.inst}<span>${formatPrice(buyLeg.ask)}</span></div></td>
+                        <td><div class="exchange-link" data-exchange="${escapeHTML(sellLeg.ex)}" data-instrument="${escapeHTML(sellLeg.inst)}" data-pair="${escapedPair}">${getExchangeTag(sellLeg.ex)} ${sellLeg.inst}<span>${formatPrice(sellLeg.bid)}</span></div></td>
+                        <td><div class="profit-cell ${lucroEClass}">${formatDirectProfitPercentage(netSpreadPercentage)}</div></td>
                         <td><div class="profit-cell ${lucroSClass}">${formatDirectProfitPercentage(lucroS_percent)}</div></td>
                         <td><div class="volume-cell">${volumeDisplay}</div></td>
                         <td><div class="funding-cell ${fundingRateClass}">${fundingRateDisplay}</div></td>
-                        
+                        <td class="qty-cell" title="Qtd. de ${escapeHTML(baseAsset)} para ${currentDefaultCapital.toLocaleString("pt-BR", {style:"currency", currency:"USD"})}">${qtyCellContent}</td>
+                        <td class="action-cell">${calculatorIcon}</td>
+                        <td class="remove-cell"><button class="remove-individual-op-button" data-pair="${escapedPair}" data-buy-ex="${escapeHTML(buyLeg.ex)}" data-buy-inst="${escapeHTML(buyLeg.inst)}" data-sell-ex="${escapeHTML(sellLeg.ex)}" data-sell-inst="${escapeHTML(sellLeg.inst)}" title="Remover esta oportunidade específica">×</button></td>
                     </tr>
                 `;
-            });
+                combinationsForThisPair++;
+            }
         }
+        
+        if (combinationsForThisPair === 0) {
+            tableHtml += `<tr><td colspan="10" class="no-data">Aguardando dados de mercado para ${escapedPair}...</td></tr>`;
+        }
+        totalCombinationsFound += combinationsForThisPair;
     });
 
-    if (combinationsFound === 0 && state.watchedPairsList.length > 0) {
-        tableHtml = `<tr><td colspan="8" class="no-data">Nenhuma combinação visível para os pares vigiados com os filtros atuais.</td></tr>`;
+    if (totalCombinationsFound === 0 && state.watchedPairsList.length > 0) {
+        tableHtml = `<tr><td colspan="10" class="no-data">Nenhum dado de mercado disponível para os pares vigiados.</td></tr>`;
     }
 
     watchedPairsTableBodyEl.innerHTML = tableHtml;
-    
-    document.querySelectorAll(".hide-watched-op-button").forEach(button => {
-        button.addEventListener("click", function() {
-            hideWatchedOpportunity(this.dataset.opKey);
-        });
-    });
 
     document.querySelectorAll(".remove-pair-button").forEach(button => {
         button.addEventListener("click", function() {
             removeWatchedPair(this.dataset.pair);
+        });
+    });
+
+    // Event listener para botões de remoção individual
+    document.querySelectorAll(".remove-individual-op-button").forEach(button => {
+        button.addEventListener("click", function() {
+            removeIndividualWatchedOp(this.dataset.pair, this.dataset.buyEx, this.dataset.buyInst, this.dataset.sellEx, this.dataset.sellInst);
         });
     });
 }
@@ -854,6 +857,68 @@ function updateWatchedPairsCount() {
     if (watchedPairsCountEl) {
         watchedPairsCountEl.textContent = state.watchedPairsList.length;
     }
+}
+
+function removeIndividualWatchedOp(pair, buyEx, buyInst, sellEx, sellInst) {
+    // Cria um identificador único para esta combinação específica
+    const opId = `${pair}_${buyEx}_${buyInst}_${sellEx}_${sellInst}`;
+    
+    // Adiciona à lista de oportunidades ocultas
+    state.hiddenWatchedOps.add(opId);
+    
+    // Verifica se todas as combinações possíveis deste par foram ocultadas
+    if (areAllCombinationsHidden(pair)) {
+        // Remove o par completamente da lista de pares em vigilância
+        state.watchedPairsList = state.watchedPairsList.filter(p => p !== pair);
+        
+        // Remove todas as combinações ocultas deste par do conjunto
+        state.hiddenWatchedOps = new Set(Array.from(state.hiddenWatchedOps).filter(opKey => !opKey.startsWith(`${pair}_`)));
+        
+        // Atualiza o contador de pares em vigilância
+        updateWatchedPairsCount();
+    }
+    
+    // Salva no localStorage
+    localStorage.setItem(HIDDEN_WATCHED_OPS_STORAGE_KEY, JSON.stringify([...state.hiddenWatchedOps]));
+    
+    // Re-renderiza a tabela
+    renderWatchedPairsTable();
+}
+
+function areAllCombinationsHidden(pair) {
+    // Obtém os dados das exchanges para este par
+    const mexcData = state.allPairsData.find(d => d.exchange.toLowerCase() === 'mexc' && d.pair === pair);
+    const gateioData = state.allPairsData.find(d => d.exchange.toLowerCase() === 'gateio' && d.pair === pair);
+
+    // Constrói todas as combinações possíveis (mesmo código da renderWatchedPairsTable)
+    const legs = [];
+    if (mexcData) {
+        if (mexcData.spotPrice) legs.push({ ex: 'MEXC', inst: 'SPOT' });
+        if (mexcData.futuresPrice) legs.push({ ex: 'MEXC', inst: 'FUTUROS' });
+    }
+    if (gateioData) {
+        if (gateioData.spotPrice) legs.push({ ex: 'Gate.io', inst: 'SPOT' });
+        if (gateioData.futuresPrice) legs.push({ ex: 'Gate.io', inst: 'FUTUROS' });
+    }
+
+    // Verifica todas as combinações possíveis
+    let totalCombinations = 0;
+    let hiddenCombinations = 0;
+    
+    for (const buyLeg of legs) {
+        for (const sellLeg of legs) {
+            if (buyLeg.ex === sellLeg.ex && buyLeg.inst === sellLeg.inst) continue;
+            
+            totalCombinations++;
+            const opId = `${pair}_${buyLeg.ex}_${buyLeg.inst}_${sellLeg.ex}_${sellLeg.inst}`;
+            if (state.hiddenWatchedOps.has(opId)) {
+                hiddenCombinations++;
+            }
+        }
+    }
+    
+    // Retorna true se todas as combinações estão ocultas
+    return totalCombinations > 0 && hiddenCombinations === totalCombinations;
 }
 
 function renderOpportunitiesTable() {
@@ -972,10 +1037,12 @@ function renderOpportunitiesTable() {
             
             tableHtml += `<tr>
                 <td class="pair-cell">
-                    <span class="block-icon not-blocked" data-op-key="${escapedOpKey}" data-op-data="${opDataForSnapshot}" title="Bloquear">🚫</span>
-                    ${openAllIcon}
-                    ${getCurrencyIcon(op.pair)}
-                    ${escapeHTML(op.pair) || "N/A"}
+                    <div class="pair-cell-content">
+                        <span class="block-icon not-blocked" data-op-key="${escapedOpKey}" data-op-data="${opDataForSnapshot}" title="Bloquear">🚫</span>
+                        ${openAllIcon}
+                        ${getCurrencyIcon(op.pair)}
+                        <span class="pair-text">${escapeHTML(op.pair) || "N/A"}</span>
+                    </div>
                 </td>
                 <td>${compraLink}</td>
                 <td>${vendaLink}</td>
@@ -984,6 +1051,7 @@ function renderOpportunitiesTable() {
                 <td><div class="volume-cell">${volumeDisplay}</div></td>
                 <td><div class="funding-cell ${fundingRateClass}">${fundingRateDisplay}</div></td>
                 <td class="qty-cell" title="Qtd. de ${escapeHTML(baseAsset)} para ${currentDefaultCapital.toLocaleString("pt-BR", {style:"currency", currency:"USD"})}">${qtyCellContent}</td>
+                <td><div class="time-cell ${timeInfo.class}">${timeInfo.text}</div></td>
                 <td class="action-cell">${calculatorIcon}</td>
             </tr>`;
         } catch (error) {
@@ -1024,7 +1092,7 @@ function renderBlockedOpportunitiesTable() {
         }
         return `
       <tr>
-        <td class="pair-cell">${getCurrencyIcon(snapshot.pair || "")} ${escapeHTML(snapshot.pair)}</td>
+        <td><div class="pair-cell-content">${getCurrencyIcon(snapshot.pair || "")} <span class="pair-text">${escapeHTML(snapshot.pair)}</span></div></td>
         <td>${getExchangeTag(snapshot.buyExchange)} ${snapshot.buyInstrument}<span>${formatPrice(snapshot.buyPrice)}</span></td>
         <td>${getExchangeTag(snapshot.sellExchange)} ${snapshot.sellInstrument}<span>${formatPrice(snapshot.sellPrice)}</span></td>
         <td><div class="profit-cell ${lucroEClass}">${lucroE_display}</div></td>
@@ -1134,38 +1202,33 @@ function connectWebSocket() {
             let UINeedsUpdate = false;
 
             if (message.type === "opportunity") {
-        const opportunityData = message.data;
-        const existingIndex = state.arbitrageOpportunities.findIndex(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
+                const opportunityData = message.data;
+                const existingIndex = state.arbitrageOpportunities.findIndex(opW => opW.data.pair === opportunityData.pair && opW.data.direction === opportunityData.direction);
 
-        if (existingIndex > -1) {
-            // A oportunidade já existe, atualize os dados, mas mantenha o firstSeen original.
-            const existingWrapper = state.arbitrageOpportunities[existingIndex];
-            existingWrapper.data = opportunityData;
-        } else {
-            // É uma nova oportunidade, adicione-a com o firstSeen do servidor.
-            state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: opportunityData.firstSeen });
-        }
-        UINeedsUpdate = true;
+                if (existingIndex > -1) {
+                    const existingWrapper = state.arbitrageOpportunities[existingIndex];
+                    existingWrapper.data = opportunityData;
+                } else {
+                    state.arbitrageOpportunities.unshift({ data: opportunityData, firstSeen: opportunityData.firstSeen });
+                }
+                UINeedsUpdate = true;
 
-    } else if (message.type === "opportunities") {
-        // Mapeia as oportunidades recebidas, garantindo que cada uma tenha um wrapper com 'data' e 'firstSeen'.
-        const newOpportunities = message.data || [];
-        const updatedOpportunities = newOpportunities.map(newOp => {
-            const existingOp = state.arbitrageOpportunities.find(oldOp => 
-                oldOp.data.pair === newOp.pair && oldOp.data.direction === newOp.direction
-            );
-            if (existingOp) {
-                // A oportunidade já existe, mantenha o firstSeen original.
-                return { data: newOp, firstSeen: existingOp.firstSeen };
-            } else {
-                // É uma nova oportunidade, use o firstSeen do servidor ou defina um novo.
-                return { data: newOp, firstSeen: newOp.firstSeen || Date.now() };
-            }
-        });
-        state.arbitrageOpportunities = updatedOpportunities;
-        UINeedsUpdate = true;
+            } else if (message.type === "opportunities") {
+                const newOpportunities = message.data || [];
+                const updatedOpportunities = newOpportunities.map(newOp => {
+                    const existingOp = state.arbitrageOpportunities.find(oldOp => 
+                        oldOp.data.pair === newOp.pair && oldOp.data.direction === newOp.direction
+                    );
+                    if (existingOp) {
+                        return { data: newOp, firstSeen: existingOp.firstSeen };
+                    } else {
+                        return { data: newOp, firstSeen: newOp.firstSeen || Date.now() };
+                    }
+                });
+                state.arbitrageOpportunities = updatedOpportunities;
+                UINeedsUpdate = true;
 
-    } else if (message.type === "all_pairs_update") {
+            } else if (message.type === "all_pairs_update") {
                 state.allPairsData = message.data || [];
                 UINeedsUpdate = true;
             }
@@ -1297,7 +1360,6 @@ function setupEventListeners() {
     if (defaultCapitalInputEl) { defaultCapitalInputEl.addEventListener("input", () => { let newCapital = parseFloat(defaultCapitalInputEl.value.trim()); newCapital = isNaN(newCapital) || newCapital < 0 ? 0 : newCapital; state.defaultCapitalUSD = newCapital; localStorage.setItem(DEFAULT_CAPITAL_STORAGE_KEY, String(newCapital)); requestUiUpdate(); }); }
     if (soundProfitThresholdInputEl) soundProfitThresholdInputEl.addEventListener("input", () => { state.soundProfitThreshold = parseFloat(soundProfitThresholdInputEl.value) || 0 });
 
-    // NOVO EVENT LISTENER PARA O SELETOR DE FREQUÊNCIA
     if (updateIntervalSelectEl) {
         updateIntervalSelectEl.addEventListener("change", async () => {
             const newInterval = parseInt(updateIntervalSelectEl.value);
@@ -1373,13 +1435,11 @@ function init() {
     state.defaultCapitalUSD = savedCapital ? parseFloat(savedCapital) : 0;
     if (defaultCapitalInputEl) defaultCapitalInputEl.value = state.defaultCapitalUSD > 0 ? state.defaultCapitalUSD : "";
 
-    // LÓGICA PARA CARREGAR A FREQUÊNCIA SALVA
     const savedInterval = localStorage.getItem(UPDATE_INTERVAL_STORAGE_KEY);
     if (savedInterval && updateIntervalSelectEl) {
         updateIntervalSelectEl.value = savedInterval;
         state.config.general.main_tick_interval_ms = parseInt(savedInterval);
     } else if (updateIntervalSelectEl) {
-        // Define o valor padrão se nada estiver salvo
         const defaultInterval = "1000";
         updateIntervalSelectEl.value = defaultInterval;
         state.config.general.main_tick_interval_ms = parseInt(defaultInterval);
@@ -1397,15 +1457,12 @@ function init() {
     updateAllUI();
     connectWebSocket();
     
-    // Iniciar atualização automática das idades a cada segundo
     setInterval(updateOpportunityAges, 1000);
 }
 
 document.addEventListener("DOMContentLoaded", init);
 
-// Função para atualizar as idades das oportunidades em tempo real
 function updateOpportunityAges() {
-    // Atualizar idades na tabela principal de oportunidades
     const mainTableRows = document.querySelectorAll('#opportunities-table-body tr');
     mainTableRows.forEach((row, index) => {
         const timeCell = row.querySelector('.time-cell');
@@ -1419,7 +1476,6 @@ function updateOpportunityAges() {
         }
     });
     
-    // Atualizar idades na tabela de pares vigiados
     const watchedTableRows = document.querySelectorAll('#watched-pairs-table-body tr');
     watchedTableRows.forEach(row => {
         const timeCell = row.querySelector('.time-cell');
@@ -1433,3 +1489,139 @@ function updateOpportunityAges() {
     });
 }
 
+
+// =================================================================================
+// FUNÇÕES GLOBAIS PARA ABERTURA DE GRÁFICOS E CALCULADORA (MOVIDAS DO INDEX.HTML)
+// =================================================================================
+
+const SHARED_TRADE_WINDOW_1 = "sharedTradeWindow1Multi";
+const SHARED_TRADE_WINDOW_2 = "sharedTradeWindow2Multi";
+let lastOpenedTradeWindowIsFirst = true;
+
+function arredondarQuantidadeSugerida(qtdFloat) {
+    if (qtdFloat > 0 && qtdFloat < 1) return qtdFloat.toFixed(8);
+    if (qtdFloat >= 1) return Math.floor(qtdFloat);
+    return 0;
+}
+
+function copiarParaClipboard(texto, buttonElement) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(String(texto)).then(() => {
+            if (buttonElement) {
+                const originalText = buttonElement.textContent;
+                buttonElement.textContent = "✓";
+                setTimeout(() => { buttonElement.textContent = originalText }, 1000);
+            }
+        }).catch(err => console.error("FRONTEND: Falha ao copiar:", err));
+    }
+}
+
+function getExchangeUrl(exchange, instrument, pair) {
+    const pairForURL = pair.replace("/", "_").toUpperCase();
+    const exchangeLower = (exchange || "").toLowerCase();
+    const instrumentUpper = (instrument || "").toUpperCase();
+    const finalInstrument = (instrumentUpper === "SPOT" || instrumentUpper === "PONTO") ? "spot" : "futures";
+    if (exchangeLower === "mexc") {
+        return finalInstrument === "spot" ? `https://www.mexc.com/exchange/${pairForURL}?type=spot` : `https://futures.mexc.com/exchange/${pairForURL}`;
+    } else if (exchangeLower === "gateio" || exchangeLower === "gate.io") {
+        return finalInstrument === "spot" ? `https://www.gate.io/trade/${pairForURL}` : `https://www.gate.io/futures_trade/USDT/${pairForURL}`;
+    }
+    return null;
+}
+
+function abrirCalculadora(pair, direction, buyEx, sellEx, forceNewWindow = false) {
+    const url = `realtime_profit_calc.html?pair=${encodeURIComponent(pair)}&direction=${encodeURIComponent(direction)}&buyEx=${encodeURIComponent(buyEx)}&sellEx=${encodeURIComponent(sellEx)}`;
+    const windowName = forceNewWindow ? "_blank" : "arbitrage_calculator_window";
+    const popWidth = 420;
+    const popHeight = 220;
+    const left = (window.screen.availWidth / 2) - (popWidth / 2);
+    const top = (window.screen.availHeight / 2) - (popHeight / 2);
+    const features = `width=${popWidth},height=${popHeight},top=${top},left=${left},resizable=yes,scrollbars=yes`;
+    const calcWindow = window.open(url, windowName, features);
+    if (calcWindow) calcWindow.focus();
+}
+
+function openExchangeTradingPage(exchange, instrument, pair, direction, isFinalLegForCalc, useSharedWindow = true, opDataForCopyStr) {
+    if (!pair || typeof pair !== 'string' || !exchange) {
+        console.error("Parâmetros inválidos para openExchangeTradingPage:", exchange, instrument, pair);
+        return;
+    }
+
+    let opDataToUse = null;
+    if (typeof opDataForCopyStr === 'string') {
+        try {
+            opDataToUse = JSON.parse(opDataForCopyStr.replace(/&quot;/g, '"'));
+        } catch (e) {
+            console.error("Falha ao parsear opDataForCopyStr", e);
+        }
+    }
+
+    if (opDataToUse && opDataToUse.buyPrice && window.frontendState && window.frontendState.defaultCapitalUSD > 0) {
+        const buyPrice = parseFloat(opDataToUse.buyPrice);
+        if (buyPrice > 0) {
+            const qtdOriginal = window.frontendState.defaultCapitalUSD / buyPrice;
+            const qtdSugerida = arredondarQuantidadeSugerida(qtdOriginal);
+            if (qtdSugerida > 0) {
+                copiarParaClipboard(String(qtdSugerida));
+            }
+        }
+    }
+
+    const pairForURL = pair.replace('/', '_').toUpperCase();
+    let url = "";
+    const exchangeLower = exchange.toLowerCase();
+    const instrumentUpper = instrument.toUpperCase();
+    let windowName;
+
+    const screenW = window.screen.availWidth;
+    const screenH = window.screen.availHeight;
+    const topPos = Math.floor(screenH * 0.03);
+    const tradeWindowHeight = Math.floor(screenH * 0.9);
+    const tradeWindowWidth = Math.floor(screenW / 2) - 15;
+
+    if (useSharedWindow) {
+        if (lastOpenedTradeWindowIsFirst) {
+            windowName = SHARED_TRADE_WINDOW_1;
+        } else {
+            windowName = SHARED_TRADE_WINDOW_2;
+        }
+    } else {
+        windowName = `_${pairForURL}_${exchangeLower}_${instrumentUpper}_${Date.now()}`;
+    }
+
+    const winLeft = (windowName === SHARED_TRADE_WINDOW_1) ? 0 : screenW - tradeWindowWidth;
+
+    if (exchangeLower === 'mexc') {
+        if (instrumentUpper === 'SPOT') url = `https://www.mexc.com/exchange/${pairForURL}?type=spot`;
+        else url = `https://futures.mexc.com/exchange/${pairForURL}`;
+    } else if (exchangeLower === 'gateio') {
+        if (instrumentUpper === 'SPOT') url = `https://www.gate.io/trade/${pairForURL}`;
+        else url = `https://www.gate.io/futures_trade/USDT/${pairForURL}`;
+    } else {
+        console.error("Corretora desconhecida:", exchange);
+        return;
+    }
+
+    const windowFeatures = `width=${tradeWindowWidth},height=${tradeWindowHeight},left=${winLeft},top=${topPos},resizable=yes,scrollbars=yes`;
+    const openedWindow = window.open(url, windowName, windowFeatures);
+    if (openedWindow) {
+        openedWindow.focus();
+    }
+
+
+    if (useSharedWindow && isFinalLegForCalc && direction) {
+        setTimeout(() => {
+            abrirCalculadora(pair, direction, opDataToUse.buyExchange, opDataToUse.sellExchange);
+        }, 50);
+    }
+
+    if (useSharedWindow && typeof isFinalLegForCalc === 'boolean') {
+        lastOpenedTradeWindowIsFirst = !lastOpenedTradeWindowIsFirst;
+    }
+}
+
+function abrirGraficosComLayout(buyExchange, buyInstrument, sellExchange, sellInstrument, pair, direction, opDataForCopyStr) {
+    lastOpenedTradeWindowIsFirst = true; // Reseta a flag para garantir la ordem correta
+    openExchangeTradingPage(buyExchange, buyInstrument, pair, direction, false, true, opDataForCopyStr);
+    openExchangeTradingPage(sellExchange, sellInstrument, pair, direction, true, true, opDataForCopyStr);
+}
